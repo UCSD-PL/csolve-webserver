@@ -21,16 +21,264 @@
 #ifndef MONGOOSE_HEADER_INCLUDED
 #define  MONGOOSE_HEADER_INCLUDED
 
+#ifdef __linux__
+#define _XOPEN_SOURCE 600     // For flockfile() on Linux
+#endif
+
+#include <csolve.h>
 #include <stdio.h>
 #include <stddef.h>
+#include <pthread.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <limits.h>
+#ifndef O_BINARY
+#define O_BINARY  0
+#endif // O_BINARY
+#define closesocket(a) close(a)
+#define mg_mkdir(x, y) mkdir(x, y)
+#define mg_remove(x) remove(x)
+#define mg_sleep(x) usleep((x) * 1000)
+#define ERRNO errno
+#define INVALID_SOCKET (-1)
+#define INT64_FMT PRId64
+typedef int SOCKET;
+#define WINCDECL
+
+#define MG_BUF_LEN 8192
+#define PASSWORDS_FILE_NAME ".htpasswd"
+extern const char *http_500_error;
+
+// Macros for enabling compiler-specific checks for printf-like arguments.
+#undef PRINTF_FORMAT_STRING
+#if _MSC_VER >= 1400
+#include <sal.h>
+#if _MSC_VER > 1400
+#define PRINTF_FORMAT_STRING(s) _Printf_format_string_ s
+#else
+#define PRINTF_FORMAT_STRING(s) __format_string s
+#endif
+#else
+#define PRINTF_FORMAT_STRING(s) s
+#endif
+
+#ifdef __GNUC__
+#define PRINTF_ARGS(x, y) __attribute__((format(printf, x, y)))
+#else
+#define PRINTF_ARGS(x, y)
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
 
+#if defined(NO_SSL_DL)
+#include <openssl/ssl.h>
+#else
+// SSL loaded dynamically from DLL.
+// I put the prototypes here to be independent from OpenSSL source installation.
+typedef struct ssl_st SSL;
+typedef struct ssl_method_st SSL_METHOD;
+typedef struct ssl_ctx_st SSL_CTX;
+
+struct ssl_func {
+  const char *name;   // SSL function name
+  void  (*ptr)(void); // Function pointer
+};
+
+#define SSL_free (* (void (*)(SSL *)) ssl_sw[0].ptr)
+#define SSL_accept (* (int (*)(SSL *)) ssl_sw[1].ptr)
+#define SSL_connect (* (int (*)(SSL *)) ssl_sw[2].ptr)
+#define SSL_read (* (int (*)(SSL *, void *, int)) ssl_sw[3].ptr)
+#define SSL_write (* (int (*)(SSL *, const void *,int)) ssl_sw[4].ptr)
+#define SSL_get_error (* (int (*)(SSL *, int)) ssl_sw[5].ptr)
+#define SSL_set_fd (* (int (*)(SSL *, SOCKET)) ssl_sw[6].ptr)
+#define SSL_new (* (SSL * (*)(SSL_CTX *)) ssl_sw[7].ptr)
+#define SSL_CTX_new (* (SSL_CTX * (*)(SSL_METHOD *)) ssl_sw[8].ptr)
+#define SSLv23_server_method (* (SSL_METHOD * (*)(void)) ssl_sw[9].ptr)
+#define SSL_library_init (* (int (*)(void)) ssl_sw[10].ptr)
+#define SSL_CTX_use_PrivateKey_file (* (int (*)(SSL_CTX *, \
+        const char *, int)) ssl_sw[11].ptr)
+#define SSL_CTX_use_certificate_file (* (int (*)(SSL_CTX *, \
+        const char *, int)) ssl_sw[12].ptr)
+#define SSL_CTX_set_default_passwd_cb \
+  (* (void (*)(SSL_CTX *, mg_callback_t)) ssl_sw[13].ptr)
+#define SSL_CTX_free (* (void (*)(SSL_CTX *)) ssl_sw[14].ptr)
+#define SSL_load_error_strings (* (void (*)(void)) ssl_sw[15].ptr)
+#define SSL_CTX_use_certificate_chain_file \
+  (* (int (*)(SSL_CTX *, const char *)) ssl_sw[16].ptr)
+#define SSLv23_client_method (* (SSL_METHOD * (*)(void)) ssl_sw[17].ptr)
+#define SSL_pending (* (int (*)(SSL *)) ssl_sw[18].ptr)
+#define SSL_CTX_set_verify (* (void (*)(SSL_CTX *, int, int)) ssl_sw[19].ptr)
+
+#define CRYPTO_num_locks (* (int (*)(void)) crypto_sw[0].ptr)
+#define CRYPTO_set_locking_callback \
+  (* (void (*)(void (*)(int, int, const char *, int))) crypto_sw[1].ptr)
+#define CRYPTO_set_id_callback \
+  (* (void (*)(unsigned long (*)(void))) crypto_sw[2].ptr)
+#define ERR_get_error (* (unsigned long (*)(void)) crypto_sw[3].ptr)
+#define ERR_error_string (* (char * (*)(unsigned long,char *)) crypto_sw[4].ptr)
+
+// set_ssl_option() function updates this array.
+// It loads SSL library dynamically and changes NULLs to the actual addresses
+// of respective functions. The macros above (like SSL_connect()) are really
+// just calling these functions indirectly via the pointer.
+static struct ssl_func ssl_sw[] = {
+  {"SSL_free",   NULL},
+  {"SSL_accept",   NULL},
+  {"SSL_connect",   NULL},
+  {"SSL_read",   NULL},
+  {"SSL_write",   NULL},
+  {"SSL_get_error",  NULL},
+  {"SSL_set_fd",   NULL},
+  {"SSL_new",   NULL},
+  {"SSL_CTX_new",   NULL},
+  {"SSLv23_server_method", NULL},
+  {"SSL_library_init",  NULL},
+  {"SSL_CTX_use_PrivateKey_file", NULL},
+  {"SSL_CTX_use_certificate_file",NULL},
+  {"SSL_CTX_set_default_passwd_cb",NULL},
+  {"SSL_CTX_free",  NULL},
+  {"SSL_load_error_strings", NULL},
+  {"SSL_CTX_use_certificate_chain_file", NULL},
+  {"SSLv23_client_method", NULL},
+  {"SSL_pending", NULL},
+  {"SSL_CTX_set_verify", NULL},
+  {NULL,    NULL}
+};
+
+// Similar array as ssl_sw. These functions could be located in different lib.
+#if !defined(NO_SSL)
+static struct ssl_func crypto_sw[] = {
+  {"CRYPTO_num_locks",  NULL},
+  {"CRYPTO_set_locking_callback", NULL},
+  {"CRYPTO_set_id_callback", NULL},
+  {"ERR_get_error",  NULL},
+  {"ERR_error_string", NULL},
+  {NULL,    NULL}
+};
+#endif // NO_SSL
+#endif // NO_SSL_DL
+
+// NOTE(lsm): this enum shoulds be in sync with the config_options below.
+enum {
+  CGI_EXTENSIONS, CGI_ENVIRONMENT, PUT_DELETE_PASSWORDS_FILE, CGI_INTERPRETER,
+  PROTECT_URI, AUTHENTICATION_DOMAIN, SSI_EXTENSIONS, THROTTLE,
+  ACCESS_LOG_FILE, ENABLE_DIRECTORY_LISTING, ERROR_LOG_FILE,
+  GLOBAL_PASSWORDS_FILE, INDEX_FILES, ENABLE_KEEP_ALIVE, ACCESS_CONTROL_LIST,
+  EXTRA_MIME_TYPES, LISTENING_PORTS, DOCUMENT_ROOT, SSL_CERTIFICATE,
+  NUM_THREADS, RUN_AS_USER, REWRITE, HIDE_FILES, REQUEST_TIMEOUT,
+  NUM_OPTIONS
+};
+
+static const char *config_options[] = {
+  "cgi_pattern", "**.cgi$|**.pl$|**.php$",
+  "cgi_environment", NULL,
+  "put_delete_auth_file", NULL,
+  "cgi_interpreter", NULL,
+  "protect_uri", NULL,
+  "authentication_domain", "mydomain.com",
+  "ssi_pattern", "**.shtml$|**.shtm$",
+  "throttle", NULL,
+  "access_log_file", NULL,
+  "enable_directory_listing", "yes",
+  "error_log_file", NULL,
+  "global_auth_file", NULL,
+  "index_files",
+    "index.html,index.htm,index.cgi,index.shtml,index.php,index.lp",
+  "enable_keep_alive", "no",
+  "access_control_list", NULL,
+  "extra_mime_types", NULL,
+  "listening_ports", "8080",
+  "document_root",  ".",
+  "ssl_certificate", NULL,
+  "num_threads", "50",
+  "run_as_user", NULL,
+  "url_rewrite_patterns", NULL,
+  "hide_files_patterns", NULL,
+  "request_timeout_ms", "30000",
+  NULL
+};
+
+// Unified socket address. For IPv6 support, add IPv6 address structure
+// in the union u.
+union usa {
+  struct sockaddr sa;
+  struct sockaddr_in sin;
+#if defined(USE_IPV6)
+  struct sockaddr_in6 sin6;
+#endif
+};
+
+// Describes a string (chunk of memory).
+struct vec {
+  const char *ptr;
+  size_t len;
+};
+
+struct file {
+  int is_directory;
+  time_t modification_time;
+  int64_t size;
+  FILE *fp;
+  const char *membuf;   // Non-NULL if file data is in memory
+};
+#define STRUCT_FILE_INITIALIZER {0, 0, 0, NULL, NULL}
+
+#define SOCKET int
+// Describes listening socket, or socket which was accept()-ed by the master
+// thread and queued for future handling by the worker thread.
+struct socket {
+  SOCKET sock;          // Listening socket
+  union usa lsa;        // Local socket address
+  union usa rsa;        // Remote socket address
+  unsigned is_ssl:1;    // Is port SSL-ed
+  unsigned ssl_redir:1; // Is port supposed to redirect everything to SSL port
+};
+
 struct mg_context;     // Handle for the HTTP service itself
 struct mg_connection;  // Handle for the individual connection
 
+// This structure needs to be passed to mg_start(), to let mongoose know
+// which callbacks to invoke. For detailed description, see
+// https://github.com/valenok/mongoose/blob/master/UserManual.md
+struct mg_callbacks {
+  int  (*begin_request)(struct mg_connection *);
+  void (*end_request)(const struct mg_connection *, int reply_status_code);
+  int  (*log_message)(const struct mg_connection *, const char *message);
+  int  (*init_ssl)(void *ssl_context, void *user_data);
+  int (*websocket_connect)(const struct mg_connection *);
+  void (*websocket_ready)(struct mg_connection *);
+  int  (*websocket_data)(struct mg_connection *, int flags,
+                         char *data, size_t data_len);
+  const char * (*open_file)(const struct mg_connection *,
+                             const char *path, size_t *data_len);
+  void (*init_lua)(struct mg_connection *, void *lua_context);
+  void (*upload)(struct mg_connection *, const char *file_name);
+  int  (*http_error)(struct mg_connection *, int status);
+};
+
+
+struct mg_context {
+  volatile int stop_flag;         // Should we stop event loop
+  SSL_CTX *ssl_ctx;               // SSL context
+  char *config[NUM_OPTIONS];      // Mongoose configuration parameters
+  struct mg_callbacks callbacks;  // User-defined callback function
+  void *user_data;                // User-defined data
+
+  struct socket *listening_sockets;
+  int num_listening_sockets;
+
+  volatile int num_threads;  // Number of threads
+  pthread_mutex_t mutex;     // Protects (max|num)_threads
+  pthread_cond_t  cond;      // Condvar for tracking workers terminations
+
+  struct socket queue[20];   // Accepted sockets
+  volatile int sq_head;      // Head of the socket queue
+  volatile int sq_tail;      // Tail of the socket queue
+  pthread_cond_t sq_full;    // Signaled when socket is produced
+  pthread_cond_t sq_empty;   // Signaled when socket is consumed
+};
 
 // This structure contains information about the HTTP request.
 struct mg_request_info {
@@ -51,25 +299,128 @@ struct mg_request_info {
   } http_headers[64];         // Maximum 64 headers
 };
 
-
-// This structure needs to be passed to mg_start(), to let mongoose know
-// which callbacks to invoke. For detailed description, see
-// https://github.com/valenok/mongoose/blob/master/UserManual.md
-struct mg_callbacks {
-  int  (*begin_request)(struct mg_connection *);
-  void (*end_request)(const struct mg_connection *, int reply_status_code);
-  int  (*log_message)(const struct mg_connection *, const char *message);
-  int  (*init_ssl)(void *ssl_context, void *user_data);
-  int (*websocket_connect)(const struct mg_connection *);
-  void (*websocket_ready)(struct mg_connection *);
-  int  (*websocket_data)(struct mg_connection *, int flags,
-                         char *data, size_t data_len);
-  const char * (*open_file)(const struct mg_connection *,
-                             const char *path, size_t *data_len);
-  void (*init_lua)(struct mg_connection *, void *lua_context);
-  void (*upload)(struct mg_connection *, const char *file_name);
-  int  (*http_error)(struct mg_connection *, int status);
+struct mg_connection {
+  struct mg_request_info request_info;
+  struct mg_context *ctx;
+  SSL *ssl;                   // SSL descriptor
+  SSL_CTX *client_ssl_ctx;    // SSL context for client connections
+  struct socket client;       // Connected client
+  time_t birth_time;          // Time when request was received
+  int64_t num_bytes_sent;     // Total bytes sent to client
+  int64_t content_len;        // Content-Length header value
+  int64_t consumed_content;   // How many bytes of content have been read
+  char *buf;                  // Buffer for received data
+  char *path_info;            // PATH_INFO part of the URL
+  int must_close;             // 1 if connection must be closed
+  int buf_size;               // Buffer size
+  int request_len;            // Size of the request + headers in a buffer
+  int data_len;               // Total size of data in a buffer
+  int status_code;            // HTTP reply status code, e.g. 200
+  int throttle;               // Throttling, bytes/sec. <= 0 means no throttle
+  time_t last_throttle_time;  // Last time throttled data was sent
+  int64_t last_throttle_bytes;// Bytes sent this second
 };
+
+struct de {
+  struct mg_connection *conn;
+  char *file_name;
+  struct file file;
+};
+
+struct dir_scan_data {
+  struct de *entries;
+  int num_entries;
+  int arr_size;
+};
+
+// Parsed Authorization header
+struct ah {
+  char *user, *uri, *cnonce, *response, *qop, *nc, *nonce;
+};
+////////////////////////////////
+
+
+//////////////////////////////////////////////////////
+// ABAKST Expose functions to mg_connection (et al?)
+//////////////////////////////////////////////////////
+void send_http_error(struct mg_connection *, int, const char *,
+                            PRINTF_FORMAT_STRING(const char *fmt), ...)
+  PRINTF_ARGS(4, 5);
+void send_options(struct mg_connection *conn);
+void put_file(struct mg_connection *conn, const char *path);
+
+int mg_printf(struct mg_connection *conn, const char *fmt, ...);
+int mg_snprintf(struct mg_connection *conn, char *buf, size_t buflen,
+                       PRINTF_FORMAT_STRING(const char *fmt), ...)
+  PRINTF_ARGS(4, 5);
+int mg_remove(const char *path);
+int mg_fopen(struct mg_connection *conn, const char *path,
+                    const char *mode, struct file *filep);
+void mg_fclose(struct file *filep);
+char *mg_fgets(char *buf, size_t size, struct file *filep, char **p);
+int mg_stat(struct mg_connection *conn, const char *path,
+                   struct file *filep);
+void cry(struct mg_connection *conn,
+                PRINTF_FORMAT_STRING(const char *fmt), ...) PRINTF_ARGS(2, 3);
+
+int mg_strcasecmp(const char *s1, const char *s2);
+
+//Eventually move this somewhere else ABAKST
+int url_decode(const char *src, int src_len, char *dst,
+                      int dst_len, int is_form_url_encoded);
+void remove_double_dots_and_double_slashes(char *s);
+void convert_uri_to_file_name(struct mg_connection *conn, char *buf,
+                              size_t buf_len, struct file *filep);
+int set_throttle(const char *spec, uint32_t remote_ip, const char *uri);
+uint32_t get_remote_ip(const struct mg_connection *conn);
+int get_first_ssl_listener_index(const struct mg_context *ctx);
+void redirect_to_https_port(struct mg_connection *conn, int ssl_index);
+int is_put_or_delete_request(const struct mg_connection *conn);
+// A helper function for traversing a comma separated list of values.
+// It returns a list pointer shifted to the next value, or NULL if the end
+// of the list found.
+// Value is stored in val vector. If value has form "x=y", then eq_val
+// vector is initialized to point to the "y" part, and val vector length
+// is adjusted to point only to "x".
+const char *next_option(const char *list, struct vec *val,
+                               struct vec *eq_val);
+int is_file_opened(const struct file *filep);
+int parse_auth_header(struct mg_connection *conn, char *buf,
+                             size_t buf_size, struct ah *ah);
+int check_password(const char *method, const char *ha1, const char *uri,
+                          const char *nonce, const char *nc, const char *cnonce,
+                          const char *qop, const char *response);
+int must_hide_file(struct mg_connection *conn, const char *path);
+void handle_propfind(struct mg_connection *conn, const char *path,
+                     struct file *filep);
+int substitute_index_file(struct mg_connection *conn, char *path,
+                          size_t path_len, struct file *filep);
+int scan_directory(struct mg_connection *conn, const char *dir,
+                   void *data, void (*cb)(struct de *, void *));
+void dir_scan_callback(struct de *de, void *data);
+int compare_dir_entries(const void *p1, const void *p2);
+void print_dir_entry(struct de *de);
+int match_prefix(const char *pattern, int pattern_len, const char *str);
+void handle_cgi_request(struct mg_connection *conn, const char *prog);
+void handle_ssi_file_request(struct mg_connection *conn,
+                             const char *path);
+int is_not_modified(const struct mg_connection *conn,
+                    const struct file *filep);
+void handle_file_request(struct mg_connection *conn, const char *path,
+                         struct file *filep);
+void reset_per_request_attributes(struct mg_connection *conn);
+int read_request(FILE *fp, struct mg_connection *conn,
+                 char *buf, int bufsiz, int *nread);
+int parse_http_message(char *buf, int len, struct mg_request_info *ri);
+const char *get_header(const struct mg_request_info *ri,
+                 const char *name);
+int is_valid_uri(const char *uri);
+void log_access(const struct mg_connection *conn);
+int should_keep_alive(const struct mg_connection *conn);
+void process_new_connection(struct mg_connection *conn);
+//////////////////////////////////////////////////////
+
+
 
 // Start web server.
 //
@@ -153,25 +504,6 @@ struct mg_request_info *mg_get_request_info(struct mg_connection *);
 //  >0  number of bytes written on success
 int mg_write(struct mg_connection *, const void *buf, size_t len);
 
-
-// Macros for enabling compiler-specific checks for printf-like arguments.
-#undef PRINTF_FORMAT_STRING
-#if _MSC_VER >= 1400
-#include <sal.h>
-#if _MSC_VER > 1400
-#define PRINTF_FORMAT_STRING(s) _Printf_format_string_ s
-#else
-#define PRINTF_FORMAT_STRING(s) __format_string s
-#endif
-#else
-#define PRINTF_FORMAT_STRING(s) s
-#endif
-
-#ifdef __GNUC__
-#define PRINTF_ARGS(x, y) __attribute__((format(printf, x, y)))
-#else
-#define PRINTF_ARGS(x, y)
-#endif
 
 // Send data to the client using printf() semantics.
 //
