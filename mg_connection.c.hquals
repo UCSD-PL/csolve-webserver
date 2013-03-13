@@ -1,0 +1,12 @@
+qualif OptionsArray(v:ptr): v + 20 < BLOCK_END([V])
+qualif Option(v:int): v < 24
+qualif ParsedAH(v:int, a:ptr):
+   v != 0 => &&[DEREF([a+0]) > 0;
+               DEREF([a+4]) > 0;
+               DEREF([a+8]) > 0;
+               DEREF([a+12]) > 0;
+               DEREF([a+16]) > 0;
+               DEREF([a+20]) > 0;
+               DEREF([a+24]) > 0]
+
+

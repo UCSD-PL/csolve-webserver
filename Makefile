@@ -18,6 +18,7 @@
 
 PROG        = mongoose
 CFLAGS      = -std=c99 -O2 -W -Wall -pedantic -pthread $(COPT)
+CSOLVE=~/scratch/csolve/src/csolve
 
 # To build with Lua, download and unzip Lua 5.2.1 source code into the
 # mongoose directory, and then add $(LUA_SOURCES) to CFLAGS
@@ -88,6 +89,9 @@ linux:
 mac: bsd
 bsd:
 	$(CC) mg_connection.c mongoose.c main.c -o $(PROG) $(CFLAGS)
+
+verify_%:
+	$(CSOLVE) $(CSOLVE_FLAGS) -I include32/usr/include -c $*
 
 bsd_yassl:
 	$(CC) mongoose.c main.c build/lsqlite3.c build/sqlite3.c -o $(PROG) \
