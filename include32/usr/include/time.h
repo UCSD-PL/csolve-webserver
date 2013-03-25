@@ -188,7 +188,7 @@ __BEGIN_NAMESPACE_STD
 extern clock_t clock (void) __THROW OKEXTERN;
 
 /* Return the current time and put it in *TIMER if TIMER is not NULL.  */
-extern time_t time (time_t *__timer) __THROW;
+extern time_t time (time_t * NNOK __timer) __THROW OKEXTERN;
 
 /* Return the difference between TIME1 and TIME0.  */
 extern double difftime (time_t __time1, time_t __time0)

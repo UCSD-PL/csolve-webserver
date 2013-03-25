@@ -230,15 +230,15 @@ union usa {
 
 // Describes a string (chunk of memory).
 struct vec {
-  const char *ptr;
-  size_t len;
+  const NULLTERMSTR char * NNSTART NNSTRINGPTR NNSIZE_GE(len) FINAL ptr;
+  size_t REF(V >= 0) FINAL len;
 };
 
 struct file {
   int is_directory;
   time_t modification_time;
   int64_t size;
-  FILE * LOC(FP) fp;
+  CSOLVE_IO_FILE_PTR NNOK LOC(FP) fp;
   const char NULLTERMSTR * NNOK NNSTRINGPTR LOC(MB) membuf;   // Non-NULL if file data is in memory
 };
 #define STRUCT_FILE_INITIALIZER {0, 0, 0, NULL, NULL}
@@ -253,6 +253,12 @@ struct socket {
   unsigned is_ssl:1;    // Is port SSL-ed
   unsigned ssl_redir:1; // Is port supposed to redirect everything to SSL port
 };
+
+#ifdef CIL
+#define CSOLVE_HIDE_DECLS(x)
+#else
+#define CSOLVE_HIDE_DECLS(x) x
+#endif
 
 struct mg_context;     // Handle for the HTTP service itself
 struct mg_connection;  // Handle for the individual connection
@@ -280,64 +286,86 @@ struct mg_callbacks {
 struct mg_context {
   /* volatile int stop_flag;         // Should we stop event loop */
   /* SSL_CTX *ssl_ctx;               // SSL context */
-  char NULLTERMSTR * M STRINGPTR (M START SIZE_GE(96) config)[NUM_OPTIONS]; // Mongoose configuration parameters
-  /* struct mg_callbacks callbacks;  // User-defined callback function */
-  /* void *user_data;                // User-defined data */
+  char NULLTERMSTR * NNSTRINGPTR LOC(CTX_CFG) config[NUM_OPTIONS]; // Mongoose configuration parameters
+  CSOLVE_HIDE_DECLS
+  (
+      struct mg_callbacks callbacks;  // User-defined callback function
+      void *user_data;                // User-defined data
 
-  /* struct socket *listening_sockets; */
-  /* int num_listening_sockets; */
+      struct socket *listening_sockets;
+      int num_listening_sockets;
 
-  /* volatile int num_threads;  // Number of threads */
-  /* pthread_mutex_t mutex;     // Protects (max|num)_threads */
-  /* pthread_cond_t  cond;      // Condvar for tracking workers terminations */
+      volatile int num_threads;  // Number of threads
+      pthread_mutex_t mutex;     // Protects (max|num)_threads
+      pthread_cond_t  cond;      // Condvar for tracking workers terminations
 
-  /* struct socket queue[20];   // Accepted sockets */
-  /* volatile int sq_head;      // Head of the socket queue */
-  /* volatile int sq_tail;      // Tail of the socket queue */
-  /* pthread_cond_t sq_full;    // Signaled when socket is produced */
-  /* pthread_cond_t sq_empty;   // Signaled when socket is consumed */
-  /* int *dummy; */
+      struct socket queue[20];   // Accepted sockets
+      volatile int sq_head;      // Head of the socket queue
+      volatile int sq_tail;      // Tail of the socket queue
+      pthread_cond_t sq_full;    // Signaled when socket is produced
+      pthread_cond_t sq_empty;   // Signaled when socket is consumed
+  )
 };
 
 // This structure contains information about the HTTP request.
 struct mg_request_info {
-  const char NULLTERMSTR * OK STRINGPTR request_method; // "GET", "POST", etc
-  const char NULLTERMSTR * OK STRINGPTR uri;            // URL-decoded URI
-  const char NULLTERMSTR * OK STRINGPTR http_version;   // E.g. "1.0", "1.1"
-  const char NULLTERMSTR * OK STRINGPTR query_string;   // URL part after '?', not including '?', or NULL
-  const char NULLTERMSTR * OK STRINGPTR remote_user;    // Authenticated user, or NULL if no auth used
-  long remote_ip;             // Client's IP address
-  int remote_port;            // Client's port
-  int is_ssl;                 // 1 if SSL-ed, 0 if not
-  void *user_data;            // User data pointer passed to mg_start()
+  const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR request_method; // "GET", "POST", etc
+  const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR LOC(U) M uri;            // URL-decoded URI
+  const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR http_version;   // E.g. "1.0", "1.1"
+  const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR LOC(U) M query_string;   // URL part after '?', not including '?', or NULL
+  const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR remote_user;    // Authenticated user, or NULL if no auth used
+  CSOLVE_HIDE_DECLS
+  (
+    long remote_ip;             // Client's IP address
+    int remote_port;            // Client's port
+    int is_ssl;                 // 1 if SSL-ed, 0 if not
+    void *user_data;            // User data pointer passed to mg_start()
 
-  int num_headers;            // Number of HTTP headers
-  struct mg_header {
-    const char *name;         // HTTP header name
-    const char *value;        // HTTP header value
-  } http_headers[64];         // Maximum 64 headers
+    int num_headers;            // Number of HTTP headers
+    struct mg_header {
+      const char *name;         // HTTP header name
+      const char *value;        // HTTP header value
+    } http_headers[64];         // Maximum 64 headers
+  )
 };
+
+#define OK_URI REF(DEREF([V]) != 0)
 
 struct mg_connection {
   struct mg_request_info request_info;
-  struct mg_context * OK M ctx;
-//  SSL *ssl;                   // SSL descriptor
-//  SSL_CTX *client_ssl_ctx;    // SSL context for client connections
-//  struct socket client;       // Connected client
-//  time_t birth_time;          // Time when request was received
-//  int64_t num_bytes_sent;     // Total bytes sent to client
-//  int64_t content_len;        // Content-Length header value
-//  int64_t consumed_content;   // How many bytes of content have been read
-//  char *buf;                  // Buffer for received data
-//  char *path_info;            // PATH_INFO part of the URL
-//  int must_close;             // 1 if connection must be closed
-//  int buf_size;               // Buffer size
-//  int request_len;            // Size of the request + headers in a buffer
-//  int data_len;               // Total size of data in a buffer
-//  int status_code;            // HTTP reply status code, e.g. 200
-//  int throttle;               // Throttling, bytes/sec. <= 0 means no throttle
-//  time_t last_throttle_time;  // Last time throttled data was sent
-//  int64_t last_throttle_bytes;// Bytes sent this second
+  struct mg_context INST(CTX_CFG,CTX_CFG) * OK ctx;
+  CSOLVE_HIDE_DECLS
+  (
+    SSL *ssl;                   // SSL descriptor
+    SSL_CTX *client_ssl_ctx;    // SSL context for client connections
+  )
+  CSOLVE_HIDE_DECLS
+  (
+  struct socket client;       // Connected client
+    time_t birth_time;          // Time when request was received
+  )
+    int64_t num_bytes_sent;     // Total bytes sent to client
+  CSOLVE_HIDE_DECLS
+  (
+    int64_t content_len;        // Content-Length header value
+    int64_t consumed_content;   // How many bytes of content have been read
+    char *buf;                  // Buffer for received data
+    char *path_info;            // PATH_INFO part of the URL
+  )
+    int must_close;             // 1 if connection must be closed
+  CSOLVE_HIDE_DECLS
+  (
+    int buf_size;               // Buffer size
+    int request_len;            // Size of the request + headers in a buffer
+    int data_len;               // Total size of data in a buffer
+  )
+    int status_code;            // HTTP reply status code, e.g. 200
+    int throttle;               // Throttling, bytes/sec. <= 0 means no throttle
+  CSOLVE_HIDE_DECLS
+  (
+    time_t last_throttle_time;  // Last time throttled data was sent
+    int64_t last_throttle_bytes;// Bytes sent this second
+  )
 };
 
 struct de {
@@ -347,20 +375,20 @@ struct de {
 };
 
 struct dir_scan_data {
-  struct de *entries;
+  struct de * NNSTART NNVALIDPTR ARRAY entries;
   int num_entries;
   int arr_size;
 };
 
 // Parsed Authorization header
 struct ah {
-  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR NNREF(PIMMUT) user;
-  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR NNREF(PIMMUT) uri;
-  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR NNREF(PIMMUT) cnonce;
-  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR NNREF(PIMMUT) response;
-  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR NNREF(PIMMUT) qop;
-  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR NNREF(PIMMUT) nc;
-  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR NNREF(PIMMUT) nonce;
+  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR  user;
+  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR  uri;
+  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR  cnonce;
+  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR  response;
+  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR  qop;
+  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR  nc;
+  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR  nonce;
 };
 ////////////////////////////////
 
@@ -368,31 +396,39 @@ struct ah {
 //////////////////////////////////////////////////////
 // ABAKST Expose functions to mg_connection (et al?)
 //////////////////////////////////////////////////////
-void send_http_error(struct mg_connection *, int, const char *,
-                            PRINTF_FORMAT_STRING(const char *fmt), ...)
-  PRINTF_ARGS(4, 5);
+void send_http_error(struct mg_connection *, int, const char NULLTERMSTR *,
+                            PRINTF_FORMAT_STRING(const char NULLTERMSTR *fmt), ...)
+  PRINTF_ARGS(4, 5) OKEXTERN;
 void send_options(struct mg_connection *conn);
 void put_file(struct mg_connection *conn, const char *path);
 
-int mg_printf(struct mg_connection *conn, const char *fmt, ...);
-int mg_snprintf(struct mg_connection *conn, char *buf, size_t buflen,
-                       PRINTF_FORMAT_STRING(const char *fmt), ...)
-  PRINTF_ARGS(4, 5);
+int mg_snprintf(struct mg_connection *conn,
+                char NULLTERMSTR * STRINGPTR /* SIZE_GE(buflen)  */buf,
+                size_t buflen,
+                const char *fmt,...)
+                /* PRINTF_FORMAT_STRING(const char *fmt), ...) */
+  PRINTF_ARGS(4, 5) OKEXTERN;
+
 int mg_remove(const char *path);
 
-int mg_fopen(struct mg_connection FINAL   * conn,
-             const char NULLTERMSTR FINAL * STRINGPTR path,
-             const char NULLTERMSTR FINAL * STRINGPTR mode,
-             struct file FINAL            * filep)
+int
+REF(V != 0 => (DEREF([filep + 16]) > 0))
+mg_fopen(struct mg_connection INST(CTX_CFG,CTX_CFG) FINAL *conn,
+         const char NULLTERMSTR FINAL                     *LOC(CTX_CFG) STRINGPTR path,
+         const char NULLTERMSTR FINAL                     *STRINGPTR mode,
+         struct file                                      *filep)
   OKEXTERN;
 
-void mg_fclose(struct file *filep);
-
-char *mg_fgets(char NULLTERMSTR * OK STRINGPTR buf, size_t size, struct file INST(MB,MB) *filep, char NULLTERMSTR * NNSTRINGPTR LOC(MB) * OK p)
+int mg_stat(struct mg_connection   FINAL *conn,
+            const char NULLTERMSTR       *STRINGPTR path,
+            struct file                  *filep)
   OKEXTERN;
 
-int mg_stat(struct mg_connection *conn, const char *path,
-                   struct file *filep);
+void mg_fclose(struct file *filep) OKEXTERN;
+
+char NULLTERMSTR* NNSTRINGPTR
+mg_fgets(char NULLTERMSTR * OK STRINGPTR buf, size_t size, struct file INST(MB,MB) *filep, char NULLTERMSTR * NNSTRINGPTR LOC(MB) * OK p)
+  OKEXTERN;
 
 void cry(struct mg_connection FINAL * OK conn,
                 PRINTF_FORMAT_STRING(const char NULLTERMSTR *fmt), ...)
@@ -401,25 +437,40 @@ void cry(struct mg_connection FINAL * OK conn,
 int mg_strcasecmp(const char *s1, const char *s2);
 
 //Eventually move this somewhere else ABAKST
-int url_decode(const char *src, int src_len, char *dst,
-                      int dst_len, int is_form_url_encoded);
-void remove_double_dots_and_double_slashes(char *s);
-void convert_uri_to_file_name(struct mg_connection *conn, char *buf,
-                              size_t buf_len, struct file *filep);
-int set_throttle(const char *spec, uint32_t remote_ip, const char *uri);
-uint32_t get_remote_ip(const struct mg_connection *conn);
+int url_decode(const char NULLTERMSTR FINAL * STRINGPTR SIZE_GE(src_len) LOC(S) src,
+               int src_len,
+               char NULLTERMSTR * STRINGPTR SIZE_GE(dst_len) LOC(S) dst,
+               int dst_len,
+               int is_form_url_encoded) OKEXTERN;
+
+void remove_double_dots_and_double_slashes(char NULLTERMSTR * STRINGPTR M s) OKEXTERN;
+
+void convert_uri_to_file_name(struct mg_connection *conn,
+                              char NULLTERMSTR * STRINGPTR SIZE_GE(buf_len) buf,
+                              size_t buf_len,
+                              struct file * OK M filep) OKEXTERN;
+
+int set_throttle(const char NULLTERMSTR * NNSTRINGPTR spec,
+                 uint32_t remote_ip,
+                 const char NULLTERMSTR * STRINGPTR uri) OKEXTERN;
+
+uint32_t get_remote_ip(const struct mg_connection FINAL *conn) OKEXTERN;
 int get_first_ssl_listener_index(const struct mg_context *ctx);
-void redirect_to_https_port(struct mg_connection *conn, int ssl_index);
-int is_put_or_delete_request(const struct mg_connection *conn);
+void redirect_to_https_port(struct mg_connection *conn, int ssl_index) OKEXTERN;
+int is_put_or_delete_request(const struct mg_connection FINAL *conn) OKEXTERN;
+
 // A helper function for traversing a comma separated list of values.
 // It returns a list pointer shifted to the next value, or NULL if the end
 // of the list found.
 // Value is stored in val vector. If value has form "x=y", then eq_val
 // vector is initialized to point to the "y" part, and val vector length
 // is adjusted to point only to "x".
-const char *next_option(const char *list, struct vec *val,
-                               struct vec *eq_val);
-int is_file_opened(const struct file *filep);
+const char NULLTERMSTR* NNSTRINGPTR LOC(L)
+next_option(const char NULLTERMSTR * STRINGPTR LOC(L) list,
+            struct vec *val,
+            struct vec *eq_val) OKEXTERN;
+
+int is_file_opened(const struct file FINAL *filep) OKEXTERN;
 
 int
 REF(
@@ -431,19 +482,18 @@ REF(
                DEREF([ah+20]) > 0;
                DEREF([ah+24]) > 0]
   )
-
-parse_auth_header(struct mg_connection *conn, char NULLTERMSTR FINAL *buf,
-                             size_t buf_size, struct ah FINAL *ah)
+parse_auth_header(struct mg_connection FINAL *conn, char NULLTERMSTR FINAL *buf,
+                  size_t buf_size, struct ah FINAL *ah)
   OKEXTERN;
 
-int check_password(const char NULLTERMSTR FINAL * STRINGPTR method,
+int check_password(const char NULLTERMSTR FINAL * NNSTRINGPTR method,
                    const char NULLTERMSTR FINAL * STRINGPTR ha1,
                    const char NULLTERMSTR FINAL * STRINGPTR uri,
-                   const char NULLTERMSTR FINAL * STRINGPTR nonce,
-                   const char NULLTERMSTR FINAL * STRINGPTR nc,
-                   const char NULLTERMSTR FINAL * STRINGPTR cnonce,
-                   const char NULLTERMSTR FINAL * STRINGPTR qop,
-                   const char NULLTERMSTR FINAL * STRINGPTR response)
+                   const char NULLTERMSTR FINAL * NNSTRINGPTR nonce,
+                   const char NULLTERMSTR FINAL * NNSTRINGPTR nc,
+                   const char NULLTERMSTR FINAL * NNSTRINGPTR cnonce,
+                   const char NULLTERMSTR FINAL * NNSTRINGPTR qop,
+                   const char NULLTERMSTR FINAL * NNSTRINGPTR response)
   OKEXTERN;
 
 int must_hide_file(struct mg_connection *conn, const char *path);
@@ -451,11 +501,20 @@ void handle_propfind(struct mg_connection *conn, const char *path,
                      struct file *filep);
 int substitute_index_file(struct mg_connection *conn, char *path,
                           size_t path_len, struct file *filep);
-int scan_directory(struct mg_connection *conn, const char *dir,
-                   void *data, void (*cb)(struct de *, void *));
-void dir_scan_callback(struct de *de, void *data);
-int compare_dir_entries(const void *p1, const void *p2);
-void print_dir_entry(struct de *de);
+
+#warning "incomplete type for dir_scan_callback?"
+void dir_scan_callback(struct de *de, struct dir_scan_data *data) OKEXTERN;
+
+int scan_directory(struct mg_connection *conn,
+                   const char NULLTERMSTR *dir,
+                   struct dir_scan_data *ds,
+                   void (*cb)(struct de *, struct dir_scan_data *)) OKEXTERN;
+
+int compare_dir_entries(struct de *de1, struct de *de2) OKEXTERN;
+
+void print_dir_entry(struct de *de) OKEXTERN;
+void print_dir_entries(struct dir_scan_data FINAL *data) OKEXTERN;
+
 int match_prefix(const char *pattern, int pattern_len, const char *str);
 void handle_cgi_request(struct mg_connection *conn, const char *prog);
 void handle_ssi_file_request(struct mg_connection *conn,
@@ -576,8 +635,8 @@ int mg_write(struct mg_connection *, const void *buf, size_t len);
 // CSOLVE:
 //   AUTH(conn) || TRUSTED(fmt)
 int mg_printf(struct mg_connection *,
-              PRINTF_FORMAT_STRING(const char *fmt), ...) PRINTF_ARGS(2, 3);
-
+              PRINTF_FORMAT_STRING(const char *fmt), ...) PRINTF_ARGS(2, 3) OKEXTERN;
+void mg_printf_inc(struct mg_connection *conn, const char *fmt, ...) PRINTF_ARGS(2, 3) OKEXTERN;
 
 // Send contents of the entire file together with HTTP headers.
 // CSOLVE:

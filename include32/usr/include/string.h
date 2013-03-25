@@ -66,8 +66,9 @@ __BEGIN_NAMESPACE_STD
 extern void *memset (void *__s, int __c, size_t __n) __THROW __nonnull ((1));
 
 /* Compare N bytes of S1 and S2.  */
-extern int memcmp (__const void *__s1, __const void *__s2, size_t __n)
-     __THROW __attribute_pure__ __nonnull ((1, 2));
+                     extern int memcmp (__const void * VALIDPTR SIZE_GE(__n) __s1,
+                                        __const void * VALIDPTR SIZE_GE(__n) __s2, size_t __n)
+     __THROW __attribute_pure__ __nonnull ((1, 2)) OKEXTERN;
 
 /* Search N bytes of S for C.  */
 #ifdef __CORRECT_ISO_CPP_STRING_H_PROTO
@@ -180,7 +181,7 @@ extern size_t strxfrm_l (char *__dest, __const char *__src, size_t __n,
 
 #if defined __USE_SVID || defined __USE_BSD || defined __USE_XOPEN_EXTENDED
 /* Duplicate S, returning an identical malloc'd string.  */
-extern char NULLTERMSTR MEMPRED(DOMAIN) * START STRINGPTR REF(DOMAIN([V]) = DOMAIN([__s])) REF(TAGSET([V]) = TAGSET([__s])) REF(THE_STRING([V]) = THE_STRING([__s])) strdup (__const char MEMPRED(DOMAIN) NULLTERMSTR FINAL * STRINGPTR __s)
+extern char NULLTERMSTR * STRINGPTR strdup (__const char NULLTERMSTR FINAL * STRINGPTR __s)
      __THROW __attribute_malloc__ __nonnull ((1)) OKEXTERN;
 #endif
 
@@ -240,15 +241,17 @@ strchr (__const char *__s, int __c) __THROW
 # endif
 }
 #else
-extern char *strchr (__const char *__s, int __c)
-     __THROW __attribute_pure__ __nonnull ((1));
+extern char NULLTERMSTR * NNSTRINGPTR M LOC(S)
+strchr(__const char NULLTERMSTR FINAL * LOC(S) STRINGPTR __s,
+       int __c)
+     __THROW __attribute_pure__ __nonnull ((1)) OKEXTERN;
 #endif
 /* Find the last occurrence of C in S.  */
 #ifdef __CORRECT_ISO_CPP_STRING_H_PROTO
 extern "C++"
 {
-extern char *strrchr (char *__s, int __c)
-     __THROW __asm ("strrchr") __attribute_pure__ __nonnull ((1));
+extern char * strrchr (char *__s, int __c)
+  __THROW __asm ("strrchr") __attribute_pure__ __nonnull ((1));
 extern __const char *strrchr (__const char *__s, int __c)
      __THROW __asm ("strrchr") __attribute_pure__ __nonnull ((1));
 
@@ -267,8 +270,8 @@ strrchr (__const char *__s, int __c) __THROW
 # endif
 }
 #else
-extern char *strrchr (__const char *__s, int __c)
-     __THROW __attribute_pure__ __nonnull ((1));
+extern char NULLTERMSTR * STRINGPTR strrchr (__const char NULLTERMSTR * STRINGPTR __s, int __c)
+     __THROW __attribute_pure__ __nonnull ((1)) OKEXTERN;
 #endif
 __END_NAMESPACE_STD
 

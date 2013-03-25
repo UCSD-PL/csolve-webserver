@@ -759,7 +759,7 @@ extern char *realpath (__const char *__restrict __name,
 /* Shorthand for type of comparison functions.  */
 #ifndef __COMPAR_FN_T
 # define __COMPAR_FN_T
-typedef int (*__compar_fn_t) (__const void *, __const void *);
+typedef int (*__compar_fn_t) (__const void * LOC(L), __const void * LOC(L));
 
 # ifdef	__USE_GNU
 typedef __compar_fn_t comparison_fn_t;
@@ -778,8 +778,10 @@ extern void *bsearch (__const void *__key, __const void *__base,
 
 /* Sort NMEMB elements of BASE, of SIZE bytes each,
    using COMPAR to perform the comparisons.  */
-extern void qsort (void *__base, size_t __nmemb, size_t __size,
-		   __compar_fn_t __compar) __nonnull ((1, 4));
+extern void qsort (void *ARRAY LOC(L) START VALIDPTR SIZE_GE(__size*__nmemb) __base,
+                   size_t __nmemb,
+                   size_t __size,
+		   __compar_fn_t __compar) __nonnull ((1, 4)) OKEXTERN;
 #ifdef __USE_GNU
 extern void qsort_r (void *__base, size_t __nmemb, size_t __size,
 		     __compar_d_fn_t __compar, void *__arg)

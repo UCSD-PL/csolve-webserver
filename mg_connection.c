@@ -26,18 +26,15 @@
 #endif // DEBUG
 #endif // DEBUG_TRACE
 
-void assert_mutable(void FINAL * M p) OKEXTERN;
-
-// Authorize against the opened passwords file. Return 1 if authorized.
-
 // V = 1 => Auth(conn)
+// Authorize against the opened passwords file. Return 1 if authorized.
 int
-authorize(struct mg_connection * OK M conn,
-          struct file          * OK M filep)
-          /* struct ah * OK REF(?MUTABLE([BLOCK_BEGIN([V])])) ah) */
-  CHECK_TYPE
+authorize(struct mg_connection * OK conn,
+          struct file          * OK filep)
+/* struct ah * OK REF(?MUTABLE([BLOCK_BEGIN([V])])) ah) */
 {
   struct ah ah;
+  char *auth_domain;
   char line[256], f_user[256], ha1[256], f_domain[256], buf[MG_BUF_LEN], *p;
 
   if (!parse_auth_header(conn, buf, sizeof(buf), &ah)) {
@@ -46,14 +43,18 @@ authorize(struct mg_connection * OK M conn,
 
   // Loop over passwords file
   p = (char *) filep->membuf;
-  while (mg_fgets(line, sizeof(line), filep, &p) != NULL) {
+  while (mg_fgets(line, sizeof(line), filep, &p) != NULL)
+  {
     #ifndef CIL
     if (sscanf(line, "%[^:]:%[^:]:%s", f_user, f_domain, ha1) != 3) {
       continue;
     }
     #endif
-    if (!strcmp(ah.user, f_user) &&
-        !strcmp(conn->ctx->config[AUTHENTICATION_DOMAIN], f_domain))
+    auth_domain = conn->ctx->config[AUTHENTICATION_DOMAIN];
+    if (!strcmp(ah.user, f_user)
+        && auth_domain
+        && !strcmp(auth_domain, f_domain))
+        /* && !strcmp(conn->ctx->config[AUTHENTICATION_DOMAIN], f_domain)) */
     {
       return check_password(conn->request_info.request_method, ha1, ah.uri,
                             ah.nonce, ah.nc, ah.cnonce, ah.qop, ah.response);
@@ -66,13 +67,12 @@ authorize(struct mg_connection * OK M conn,
 // Use the global passwords file, if specified by auth_gpass option,
 // or search for .htpasswd in the requested directory.
 void
-open_auth_file(struct mg_connection * OK conn,
-               const char           * STRINGPTR path,
-               struct file          * OK filep)
-  CHECK_TYPE
+open_auth_file(struct mg_connection   * OK conn,
+               const char NULLTERMSTR * STRINGPTR path,
+               struct file            * OK filep)
 {
   char name[PATH_MAX];
-  const char *p, *e, *gpass = conn->ctx->config[GLOBAL_PASSWORDS_FILE];
+  const char *e, *gpass = conn->ctx->config[GLOBAL_PASSWORDS_FILE];
 
   if (gpass != NULL)
   {
@@ -82,37 +82,41 @@ open_auth_file(struct mg_connection * OK conn,
       cry(conn, "fopen(%s): %s", gpass, strerror(ERRNO));
     }
   }
-  /* else if (mg_stat(conn, path, filep) && filep->is_directory) */
-  /* { */
-  /*   mg_snprintf(conn, name, sizeof(name), "%s%c%s", */
-  /*               path, '/', PASSWORDS_FILE_NAME); */
-  /*   mg_fopen(conn, name, "r", filep); */
-  /* } */
-  /* else */
-  /* { */
-  /*    // Try to find .htpasswd in requested directory. */
-  /*   for (p = path, e = p + strlen(p) - 1; e > p; e--) */
-  /*     if (e[0] == '/') */
-  /*       break; */
-  /*   mg_snprintf(conn, name, sizeof(name), "%.*s%c%s", */
-  /*               (int) (e - p), p, '/', PASSWORDS_FILE_NAME); */
-  /*   mg_fopen(conn, name, "r", filep); */
-  /* } */
+  else if (mg_stat(conn, path, filep) && filep->is_directory)
+  {
+    mg_snprintf(conn, name, sizeof(name), "%s%c%s",
+                path, '/', PASSWORDS_FILE_NAME);
+    mg_fopen(conn, name, "r", filep);
+  }
+  else
+  {
+    e = strrchr(path, '/');
+    mg_snprintf(conn, name, sizeof(name), "%.*s%c%s",
+                  (ptrdiff_t)e - (ptrdiff_t)path, path, '/', PASSWORDS_FILE_NAME);
+    mg_fopen(conn, name, "r", filep);
+  }
 }
 
-#if 0
-
-// Return 1 if request is authorised, 0 otherwise.
-static int check_authorization(struct mg_connection *conn, const char *path) {
+/* // Return 1 if request is authorised, 0 otherwise. */
+int
+check_authorization(struct mg_connection *conn, const NULLTERMSTR char * STRINGPTR path)
+{
   char fname[PATH_MAX];
   struct vec uri_vec, filename_vec;
   const char *list;
   struct file file = STRUCT_FILE_INITIALIZER;
   int authorized = 1;
 
+  if (!conn->request_info.uri)
+    return 0;
+
   list = conn->ctx->config[PROTECT_URI];
-  while ((list = next_option(list, &uri_vec, &filename_vec)) != NULL) {
-    if (!memcmp(conn->request_info.uri, uri_vec.ptr, uri_vec.len)) {
+  while (list && (list = next_option(list, &uri_vec, &filename_vec)) != NULL) {
+#warning "CSOLVE: Possible bug?"
+    /* ABAKST Possible bug here? memcmp vs strcmp?
+       if (uri_vec.ptr && !memcmp(conn->request_infouri, uri_vec.ptr, uri_vec.len)) {
+    */
+    if (uri_vec.ptr && !strcmp(conn->request_info.uri, uri_vec.ptr)) {
       mg_snprintf(conn, fname, sizeof(fname), "%.*s",
                   (int) filename_vec.len, filename_vec.ptr);
       if (!mg_fopen(conn, fname, "r", &file)) {
@@ -134,21 +138,24 @@ static int check_authorization(struct mg_connection *conn, const char *path) {
   return authorized;
 }
 
-static int is_authorized_for_put(struct mg_connection *conn) {
-  struct file file = STRUCT_FILE_INITIALIZER;
-  const char *passfile = conn->ctx->config[PUT_DELETE_PASSWORDS_FILE];
-  int ret = 0;
+/* int */
+/* is_authorized_for_put(struct mg_connection *conn) CHECK_TYPE */
+/* { */
+/*   struct file file = STRUCT_FILE_INITIALIZER; */
+/*   const char *passfile = conn->ctx->config[PUT_DELETE_PASSWORDS_FILE]; */
+/*   int ret = 0; */
 
-  if (passfile != NULL && mg_fopen(conn, passfile, "r", &file)) {
-    ret = authorize(conn, &file);
-    mg_fclose(&file);
-  }
+/*   if (passfile != NULL && mg_fopen(conn, passfile, "r", &file)) { */
+/*     ret = authorize(conn, &file); */
+/*     mg_fclose(&file); */
+/*   } */
 
-  return ret;
-}
+/*   return ret; */
+/* } */
 
-
-static void send_authorization_request(struct mg_connection *conn) {
+void
+send_authorization_request(struct mg_connection *conn)
+{
   conn->status_code = 401;
   mg_printf(conn,
             "HTTP/1.1 401 Unauthorized\r\n"
@@ -159,150 +166,192 @@ static void send_authorization_request(struct mg_connection *conn) {
             (unsigned long) time(NULL));
 }
 
-static void handle_directory_request(struct mg_connection *conn,
-                                     const char *dir) {
-  int i, sort_direction;
-  struct dir_scan_data data = { NULL, 0, 128 };
+/* void */
+/* handle_directory_request(struct mg_connection * OK M conn, */
+/*                          const NULLTERMSTR char *dir) CHECK_TYPE */
+/* { */
+/*   int i, sort_direction; */
+/*   struct dir_scan_data data = { NULL, 0, 128 }; */
 
-  if (!scan_directory(conn, dir, &data, dir_scan_callback)) {
-    send_http_error(conn, 500, "Cannot open directory",
-                    "Error: opendir(%s): %s", dir, strerror(ERRNO));
-    return;
-  }
+/*   if (!scan_directory(conn, dir, &data, dir_scan_callback)) { */
+/*     send_http_error(conn, 500, "Cannot open directory", */
+/*                     "Error: opendir(%s): %s", dir, strerror(ERRNO)); */
+/*     return; */
+/*   } */
 
-  sort_direction = conn->request_info.query_string != NULL &&
-    conn->request_info.query_string[1] == 'd' ? 'a' : 'd';
+/*   sort_direction = conn->request_info.query_string != NULL && */
+/*     conn->request_info.query_string[1] == 'd' ? 'a' : 'd'; */
 
-  conn->must_close = 1;
-  mg_printf(conn, "%s",
-            "HTTP/1.1 200 OK\r\n"
-            "Connection: close\r\n"
-            "Content-Type: text/html; charset=utf-8\r\n\r\n");
+/*   conn->must_close = 1; */
+/*   mg_printf(conn, "%s", */
+/*             "HTTP/1.1 200 OK\r\n" */
+/*             "Connection: close\r\n" */
+/*             "Content-Type: text/html; charset=utf-8\r\n\r\n"); */
 
-  conn->num_bytes_sent += mg_printf(conn,
-      "<html><head><title>Index of %s</title>"
-      "<style>th {text-align: left;}</style></head>"
-      "<body><h1>Index of %s</h1><pre><table cellpadding=\"0\">"
-      "<tr><th><a href=\"?n%c\">Name</a></th>"
-      "<th><a href=\"?d%c\">Modified</a></th>"
-      "<th><a href=\"?s%c\">Size</a></th></tr>"
-      "<tr><td colspan=\"3\"><hr></td></tr>",
-      conn->request_info.uri, conn->request_info.uri,
-      sort_direction, sort_direction, sort_direction);
+/*   mg_printf_inc(conn, */
+/*       "<html><head><title>Index of %s</title>" */
+/*       "<style>th {text-align: left;}</style></head>" */
+/*       "<body><h1>Index of %s</h1><pre><table cellpadding=\"0\">" */
+/*       "<tr><th><a href=\"?n%c\">Name</a></th>" */
+/*       "<th><a href=\"?d%c\">Modified</a></th>" */
+/*       "<th><a href=\"?s%c\">Size</a></th></tr>" */
+/*                                     "<tr><td colspan=\"3\"><hr></td></tr>", */
+/*       conn->request_info.uri, conn->request_info.uri, */
+/*       sort_direction, sort_direction, sort_direction); */
 
-  // Print first entry - link to a parent directory
-  conn->num_bytes_sent += mg_printf(conn,
-      "<tr><td><a href=\"%s%s\">%s</a></td>"
-      "<td>&nbsp;%s</td><td>&nbsp;&nbsp;%s</td></tr>\n",
-      conn->request_info.uri, "..", "Parent directory", "-", "-");
+/*   // Print first entry - link to a parent directory */
+/*   mg_printf_inc(conn, */
+/*       "<tr><td><a href=\"%s%s\">%s</a></td>" */
+/*       "<td>&nbsp;%s</td><td>&nbsp;&nbsp;%s</td></tr>\n", */
+/*       conn->request_info.uri, "..", "Parent directory", "-", "-"); */
 
-  // Sort and print directory entries
-  qsort(data.entries, (size_t) data.num_entries, sizeof(data.entries[0]),
-        compare_dir_entries);
-  for (i = 0; i < data.num_entries; i++) {
-    print_dir_entry(&data.entries[i]);
-    free(data.entries[i].file_name);
-  }
-  free(data.entries);
+/*   print_dir_entries(&data); */
+/*   if (data.entries) { */
+/*     free(data.entries); */
+/*   } */
 
-  conn->num_bytes_sent += mg_printf(conn, "%s", "</table></body></html>");
-  conn->status_code = 200;
-}
+/*   mg_printf_inc(conn, "%s", "</table></body></html>"); */
+/*   conn->status_code = 200; */
+/* } */
 
 
 // This is the heart of the Mongoose's logic.
 // This function is called when the request is read, parsed and validated,
 // and Mongoose must decide what action to take: serve a file, or
 // a directory, or call embedded function, etcetera.
-static void handle_request(struct mg_connection *conn) {
+void handle_request(struct mg_connection * OK OK_URI M conn) CHECK_TYPE
+{
   struct mg_request_info *ri = &conn->request_info;
   char path[PATH_MAX];
   int uri_len, ssl_index;
   struct file file = STRUCT_FILE_INITIALIZER;
+  char *query_string = NULL;
+  char *uri = NULL;
 
-  if ((conn->request_info.query_string = strchr(ri->uri, '?')) != NULL) {
-    * ((char *) conn->request_info.query_string++) = '\0';
+  if ((uri = ri->uri) == NULL)
+    return;
+  
+  if ((query_string = strchr(ri->uri, '?')) != NULL)
+  {
+    if (*query_string) {
+      * ((char *) query_string++) = '\0';
+    } else {
+      query_string = NULL;
+    }
   }
-  uri_len = (int) strlen(ri->uri);
-  url_decode(ri->uri, uri_len, (char *) ri->uri, uri_len + 1, 0);
-  remove_double_dots_and_double_slashes((char *) ri->uri);
+  conn->request_info.query_string = query_string;
+  uri_len = (int) strlen(uri);
+  url_decode(uri, uri_len, (char *) uri, uri_len + 1, 0);
+  remove_double_dots_and_double_slashes((char *) uri);
   convert_uri_to_file_name(conn, path, sizeof(path), &file);
   conn->throttle = set_throttle(conn->ctx->config[THROTTLE],
-                                get_remote_ip(conn), ri->uri);
-
+                                get_remote_ip(conn),
+                                uri);
   DEBUG_TRACE(("%s", ri->uri));
   // Perform redirect and auth checks before calling begin_request() handler.
   // Otherwise, begin_request() would need to perform auth checks and redirects.
-  if (!conn->client.is_ssl && conn->client.ssl_redir &&
-      (ssl_index = get_first_ssl_listener_index(conn->ctx)) > -1) {
+  /* if (!conn->client.is_ssl && conn->client.ssl_redir && */
+  /*     (ssl_index = get_first_ssl_listener_index(conn->ctx)) > -1) */
+  if (nondet())
+  {
     redirect_to_https_port(conn, ssl_index);
-  } else if (!is_put_or_delete_request(conn) &&
-             !check_authorization(conn, path)) {
+  }
+  else if (!is_put_or_delete_request(conn) && !check_authorization(conn, path))
+  {
     send_authorization_request(conn);
-  } else if (conn->ctx->callbacks.begin_request != NULL &&
-      conn->ctx->callbacks.begin_request(conn)) {
-    // Do nothing, callback has served the request
+  }
+/*   else if (conn->ctx->callbacks.begin_request != NULL && */
+/*            conn->ctx->callbacks.begin_request(conn)) */
+/*   { */
+/*     // Do nothing, callback has served the request */
 /* #if defined(USE_WEBSOCKET) */
 /*   } else if (is_websocket_request(conn)) { */
 /*     handle_websocket_request(conn); */
 /* #endif */
-  } else if (!strcmp(ri->request_method, "OPTIONS")) {
-    send_options(conn);
-  } else if (conn->ctx->config[DOCUMENT_ROOT] == NULL) {
-    send_http_error(conn, 404, "Not Found", "Not Found");
-  } else if (is_put_or_delete_request(conn) &&
-             (conn->ctx->config[PUT_DELETE_PASSWORDS_FILE] == NULL ||
-              is_authorized_for_put(conn) != 1)) {
-    send_authorization_request(conn);
-  } else if (!strcmp(ri->request_method, "PUT")) {
-    put_file(conn, path);
-  } else if (!strcmp(ri->request_method, "DELETE")) {
-    if (remove(path) == 0) {
-      send_http_error(conn, 200, "OK", "%s", "");
-    } else {
-      send_http_error(conn, 500, http_500_error, "remove(%s): %s", path,
-                      strerror(ERRNO));
-    }
-  } else if ((file.membuf == NULL && file.modification_time == (time_t) 0) ||
-             must_hide_file(conn, path)) {
-    send_http_error(conn, 404, "Not Found", "%s", "File not found");
-  } else if (file.is_directory && ri->uri[uri_len - 1] != '/') {
-    mg_printf(conn, "HTTP/1.1 301 Moved Permanently\r\n"
-              "Location: %s/\r\n\r\n", ri->uri);
-  } else if (!strcmp(ri->request_method, "PROPFIND")) {
-    handle_propfind(conn, path, &file);
-  } else if (file.is_directory &&
-             !substitute_index_file(conn, path, sizeof(path), &file)) {
-    if (!mg_strcasecmp(conn->ctx->config[ENABLE_DIRECTORY_LISTING], "yes")) {
-      handle_directory_request(conn, path);
-    } else {
-      send_http_error(conn, 403, "Directory Listing Denied",
-          "Directory listing denied");
-    }
-#if !defined(NO_CGI)
-  } else if (match_prefix(conn->ctx->config[CGI_EXTENSIONS],
-                          strlen(conn->ctx->config[CGI_EXTENSIONS]),
-                          path) > 0) {
-    if (strcmp(ri->request_method, "POST") &&
-        strcmp(ri->request_method, "HEAD") &&
-        strcmp(ri->request_method, "GET")) {
-      send_http_error(conn, 501, "Not Implemented",
-                      "Method %s is not implemented", ri->request_method);
-    } else {
-      handle_cgi_request(conn, path);
-    }
-#endif // !NO_CGI
-  } else if (match_prefix(conn->ctx->config[SSI_EXTENSIONS],
-                          strlen(conn->ctx->config[SSI_EXTENSIONS]),
-                          path) > 0) {
-    handle_ssi_file_request(conn, path);
-  } else if (is_not_modified(conn, &file)) {
-    send_http_error(conn, 304, "Not Modified", "%s", "");
-  } else {
-    handle_file_request(conn, path, &file);
-  }
+/*   } */
+/*   else if (!strcmp(ri->request_method, "OPTIONS")) */
+/*   { */
+/*     send_options(conn); */
+/*   } */
+/*   else if (conn->ctx->config[DOCUMENT_ROOT] == NULL) */
+/*   { */
+/*     send_http_error(conn, 404, "Not Found", "Not Found"); */
+/*   } */
+/*   else if (is_put_or_delete_request(conn) && */
+/*            (conn->ctx->config[PUT_DELETE_PASSWORDS_FILE] == NULL || */
+/*             is_authorized_for_put(conn) != 1)) */
+/*   { */
+/*     send_authorization_request(conn); */
+/*   } */
+/*   else if (!strcmp(ri->request_method, "PUT")) */
+/*   { */
+/*     put_file(conn, path); */
+/*   } */
+/*   else if (!strcmp(ri->request_method, "DELETE")) */
+/*   { */
+/*     if (remove(path) == 0) { */
+/*       send_http_error(conn, 200, "OK", "%s", ""); */
+/*     } else { */
+/*       send_http_error(conn, 500, http_500_error, "remove(%s): %s", path, */
+/*                       strerror(ERRNO)); */
+/*     } */
+/*   } */
+/*   else if ((file.membuf == NULL && file.modification_time == (time_t) 0) || */
+/*            must_hide_file(conn, path)) */
+/*   { */
+/*     send_http_error(conn, 404, "Not Found", "%s", "File not found"); */
+/*   } */
+/*   else if (file.is_directory && ri->uri[uri_len - 1] != '/') */
+/*   { */
+/*     mg_printf(conn, "HTTP/1.1 301 Moved Permanently\r\n" */
+/*               "Location: %s/\r\n\r\n", ri->uri); */
+/*   } */
+/*   else if (!strcmp(ri->request_method, "PROPFIND")) */
+/*   { */
+/*     handle_propfind(conn, path, &file); */
+/*   } */
+/*   else if (file.is_directory && */
+/*            !substitute_index_file(conn, path, sizeof(path), &file)) */
+/*   { */
+/*     if (!mg_strcasecmp(conn->ctx->config[ENABLE_DIRECTORY_LISTING], "yes")) { */
+/*       handle_directory_request(conn, path); */
+/*     } else { */
+/*       send_http_error(conn, 403, "Directory Listing Denied", */
+/*           "Directory listing denied"); */
+/*     } */
+/* #if !defined(NO_CGI) */
+/*   } */
+/*   else if (match_prefix(conn->ctx->config[CGI_EXTENSIONS], */
+/*                         strlen(conn->ctx->config[CGI_EXTENSIONS]), */
+/*                         path) > 0) */
+/*   { */
+/*     if (strcmp(ri->request_method, "POST") && */
+/*         strcmp(ri->request_method, "HEAD") && */
+/*         strcmp(ri->request_method, "GET")) { */
+/*       send_http_error(conn, 501, "Not Implemented", */
+/*                       "Method %s is not implemented", ri->request_method); */
+/*     } else { */
+/*       handle_cgi_request(conn, path); */
+/*     } */
+/* #endif // !NO_CGI */
+/*   } */
+/*   else if (match_prefix(conn->ctx->config[SSI_EXTENSIONS], */
+/*                         strlen(conn->ctx->config[SSI_EXTENSIONS]), */
+/*                         path) > 0) */
+/*   { */
+/*     handle_ssi_file_request(conn, path); */
+/*   } */
+/*   else if (is_not_modified(conn, &file)) */
+/*   { */
+/*     send_http_error(conn, 304, "Not Modified", "%s", ""); */
+/*   } */
+/*   else */
+/*   { */
+/*     handle_file_request(conn, path, &file); */
+/*   } */
 }
 
+#if 0
 static int getreq(struct mg_connection *conn, char *ebuf, size_t ebuf_len) {
   const char *cl;
 

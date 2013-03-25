@@ -1235,6 +1235,12 @@ int mg_printf(struct mg_connection *conn, const char *fmt, ...) {
   return mg_vprintf(conn, fmt, ap);
 }
 
+void mg_printf_inc(struct mg_connection *conn, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  conn->num_bytes_sent += mg_vprintf(conn, fmt, ap);
+}
+
 // URL-decode input buffer into destination buffer.
 // 0-terminate the destination buffer. Return the length of decoded data.
 // form-url-encoded data differs from URI encoding in a way that it
@@ -2035,6 +2041,17 @@ void print_dir_entry(struct de *de) {
       "<td>&nbsp;%s</td><td>&nbsp;&nbsp;%s</td></tr>\n",
       de->conn->request_info.uri, href, de->file.is_directory ? "/" : "",
       de->file_name, de->file.is_directory ? "/" : "", mod, size);
+}
+
+void print_dir_entries(struct dir_scan_data *data)
+{
+  // Sort and print directory entries
+  qsort(data.entries, (size_t) data.num_entries, sizeof(data.entries[0]),
+        compare_dir_entries);
+  for (i = 0; i < data.num_entries; i++) {
+    print_dir_entry(&data.entries[i]);
+    free(data.entries[i].file_name);
+  }
 }
 
 // This function is called from send_directory() and used for

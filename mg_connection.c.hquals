@@ -1,12 +1,15 @@
-qualif OptionsArray(v:ptr): v + 20 < BLOCK_END([V])
+//Index into context option array
 qualif Option(v:int): v < 24
+
+//Options Parsing
+qualif VectorPtr(v:ptr, a:int): v != 0 => v + a <= BLOCK_END([v])
+
+//Handy when parsing authorization header
 qualif ParsedAH(v:int, a:ptr):
    v != 0 => &&[DEREF([a+0]) > 0;
-               DEREF([a+4]) > 0;
-               DEREF([a+8]) > 0;
-               DEREF([a+12]) > 0;
-               DEREF([a+16]) > 0;
-               DEREF([a+20]) > 0;
-               DEREF([a+24]) > 0]
-
-
+                DEREF([a+4]) > 0;
+                DEREF([a+8]) > 0;
+                DEREF([a+12]) > 0;
+                DEREF([a+16]) > 0;
+                DEREF([a+20]) > 0;
+                DEREF([a+24]) > 0]
