@@ -1235,11 +1235,6 @@ int mg_printf(struct mg_connection *conn, const char *fmt, ...) {
   return mg_vprintf(conn, fmt, ap);
 }
 
-void mg_printf_inc(struct mg_connection *conn, const char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  conn->num_bytes_sent += mg_vprintf(conn, fmt, ap);
-}
 
 // URL-decode input buffer into destination buffer.
 // 0-terminate the destination buffer. Return the length of decoded data.
@@ -1817,6 +1812,7 @@ void mg_md5(char buf[33], ...) {
   bin2str(buf, hash, sizeof(hash));
 }
 
+
 // Check the user's password, return 1 if OK
 int check_password(const char *method, const char *ha1, const char *uri,
                           const char *nonce, const char *nc, const char *cnonce,
@@ -1926,6 +1922,11 @@ char *mg_fgets(char *buf, size_t size, struct file *filep, char **p) {
   } else {
     return NULL;
   }
+}
+
+char *mg_readline(size_t size, struct file *filep, char **p) {
+  char *line = malloc(size);
+  return mg_fgets(line, size, filep, p);
 }
 
 
@@ -2043,22 +2044,11 @@ void print_dir_entry(struct de *de) {
       de->file_name, de->file.is_directory ? "/" : "", mod, size);
 }
 
-void print_dir_entries(struct dir_scan_data *data)
-{
-  // Sort and print directory entries
-  qsort(data.entries, (size_t) data.num_entries, sizeof(data.entries[0]),
-        compare_dir_entries);
-  for (i = 0; i < data.num_entries; i++) {
-    print_dir_entry(&data.entries[i]);
-    free(data.entries[i].file_name);
-  }
-}
-
 // This function is called from send_directory() and used for
 // sorting directory entries by size, or name, or modification time.
 // On windows, __cdecl specification is needed in case if project is built
 // with __stdcall convention. qsort always requires __cdels callback.
-int WINCDECL compare_dir_entries(const void *p1, const void *p2) {
+int WINCDECL compare_dir_entries(const struct de *p1, const struct de *p2) {
   const struct de *a = (const struct de *) p1, *b = (const struct de *) p2;
   const char *query_string = a->conn->request_info.query_string;
   int cmp_result = 0;
@@ -2092,7 +2082,7 @@ int must_hide_file(struct mg_connection *conn, const char *path) {
 }
 
 int scan_directory(struct mg_connection *conn, const char *dir,
-                   void *data, void (*cb)(struct de *, void *)) {
+                   struct dir_scan_data *data, void (*cb)(struct de *, struct dir_scan_data *)) {
   char path[PATH_MAX];
   struct dirent *dp;
   DIR *dirp;
@@ -2129,7 +2119,7 @@ int scan_directory(struct mg_connection *conn, const char *dir,
   return 1;
 }
 
-void dir_scan_callback(struct de *de, void *data) {
+void dir_scan_callback(struct de *de, struct dir_scan_data *data) {
   struct dir_scan_data *dsd = (struct dir_scan_data *) data;
 
   if (dsd->entries == NULL || dsd->num_entries >= dsd->arr_size) {

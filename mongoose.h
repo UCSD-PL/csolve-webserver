@@ -189,6 +189,9 @@ enum {
   NUM_OPTIONS
 };
 
+
+#define NOPTIONS 24
+
 static const char *config_options[] = {
   "cgi_pattern", "**.cgi$|**.pl$|**.php$",
   "cgi_environment", NULL,
@@ -238,7 +241,11 @@ struct file {
   int is_directory;
   time_t modification_time;
   int64_t size;
+  #ifdef CIL
   CSOLVE_IO_FILE_PTR NNOK LOC(FP) fp;
+  #else
+  FILE *fp;
+  #endif
   const char NULLTERMSTR * NNOK NNSTRINGPTR LOC(MB) membuf;   // Non-NULL if file data is in memory
 };
 #define STRUCT_FILE_INITIALIZER {0, 0, 0, NULL, NULL}
@@ -284,8 +291,11 @@ struct mg_callbacks {
 
 
 struct mg_context {
-  /* volatile int stop_flag;         // Should we stop event loop */
-  /* SSL_CTX *ssl_ctx;               // SSL context */
+  CSOLVE_HIDE_DECLS
+  (
+  volatile int stop_flag;         // Should we stop event loop
+  SSL_CTX *ssl_ctx;               // SSL context
+  )
   char NULLTERMSTR * NNSTRINGPTR LOC(CTX_CFG) config[NUM_OPTIONS]; // Mongoose configuration parameters
   CSOLVE_HIDE_DECLS
   (
@@ -309,7 +319,7 @@ struct mg_context {
 
 // This structure contains information about the HTTP request.
 struct mg_request_info {
-  const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR request_method; // "GET", "POST", etc
+  const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR FINAL  I request_method; // "GET", "POST", etc
   const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR LOC(U) M uri;            // URL-decoded URI
   const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR http_version;   // E.g. "1.0", "1.1"
   const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR LOC(U) M query_string;   // URL part after '?', not including '?', or NULL
@@ -329,7 +339,8 @@ struct mg_request_info {
   )
 };
 
-#define OK_URI REF(DEREF([V]) != 0)
+#define OK_URI  REF(DEREF([V]) != 0)
+#define OK_CONN REF(CONN([V]) = CONN([DEREF([V])]))
 
 struct mg_connection {
   struct mg_request_info request_info;
@@ -382,13 +393,13 @@ struct dir_scan_data {
 
 // Parsed Authorization header
 struct ah {
-  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR  user;
-  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR  uri;
-  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR  cnonce;
-  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR  response;
-  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR  qop;
-  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR  nc;
-  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR  nonce;
+  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR I user;
+  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR I uri;
+  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR I cnonce;
+  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR I response;
+  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR I qop;
+  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR I nc;
+  char NULLTERMSTR * FINAL NNOK NNSTRINGPTR I nonce;
 };
 ////////////////////////////////
 
@@ -426,6 +437,10 @@ int mg_stat(struct mg_connection   FINAL *conn,
 
 void mg_fclose(struct file *filep) OKEXTERN;
 
+char NULLTERMSTR* NNSTRINGPTR NNSTART NNREF(FILE([V]) = FILE([filep]))
+mg_readline(size_t size, struct file INST(MB,MB) *filep, char NULLTERMSTR * NNSTRINGPTR LOC(MB) * OK p)
+  OKEXTERN;
+
 char NULLTERMSTR* NNSTRINGPTR
 mg_fgets(char NULLTERMSTR * OK STRINGPTR buf, size_t size, struct file INST(MB,MB) *filep, char NULLTERMSTR * NNSTRINGPTR LOC(MB) * OK p)
   OKEXTERN;
@@ -434,7 +449,8 @@ void cry(struct mg_connection FINAL * OK conn,
                 PRINTF_FORMAT_STRING(const char NULLTERMSTR *fmt), ...)
   PRINTF_ARGS(2, 3) OKEXTERN;
 
-int mg_strcasecmp(const char *s1, const char *s2);
+int mg_strcasecmp(const char NULLTERMSTR FINAL * STRINGPTR s1,
+                  const char NULLTERMSTR FINAL * STRINGPTR s2) OKEXTERN;
 
 //Eventually move this somewhere else ABAKST
 int url_decode(const char NULLTERMSTR FINAL * STRINGPTR SIZE_GE(src_len) LOC(S) src,
@@ -456,7 +472,7 @@ int set_throttle(const char NULLTERMSTR * NNSTRINGPTR spec,
 
 uint32_t get_remote_ip(const struct mg_connection FINAL *conn) OKEXTERN;
 int get_first_ssl_listener_index(const struct mg_context *ctx);
-void redirect_to_https_port(struct mg_connection *conn, int ssl_index) OKEXTERN;
+void redirect_to_https_port(struct mg_connection * OK OK_CONN conn, int ssl_index) OKEXTERN;
 int is_put_or_delete_request(const struct mg_connection FINAL *conn) OKEXTERN;
 
 // A helper function for traversing a comma separated list of values.
@@ -472,35 +488,65 @@ next_option(const char NULLTERMSTR * STRINGPTR LOC(L) list,
 
 int is_file_opened(const struct file FINAL *filep) OKEXTERN;
 
-int
-REF(
-  V != 0 => &&[DEREF([ah+0]) > 0;
-               DEREF([ah+4]) > 0;
-               DEREF([ah+8]) > 0;
-               DEREF([ah+12]) > 0;
-               DEREF([ah+16]) > 0;
-               DEREF([ah+20]) > 0;
-               DEREF([ah+24]) > 0]
-  )
+#define AHParsed(__ah) (V != 0) =>  \
+    &&[DEREF([__ah+0]) > 0;         \
+       DEREF([__ah+4]) > 0;         \
+       DEREF([__ah+8]) > 0;          \
+       DEREF([__ah+12]) > 0;         \
+       DEREF([__ah+16]) > 0;         \
+       DEREF([__ah+20]) > 0;         \
+       DEREF([__ah+24]) > 0]
+
+#define AHConnection(__ah, __conn) (V != 0) =>   \
+    &&[CONN([DEREF([__ah+0])])  = CONN([__conn]);        \
+       CONN([DEREF([__ah+4])])  = CONN([__conn]);        \
+       CONN([DEREF([__ah+8])])  = CONN([__conn]);        \
+       CONN([DEREF([__ah+12])]) = CONN([__conn]);         \
+       CONN([DEREF([__ah+16])]) = CONN([__conn]);         \
+       CONN([DEREF([__ah+20])]) = CONN([__conn]);         \
+       CONN([DEREF([__ah+24])]) = CONN([__conn])]
+    
+int REF(AHParsed(ah)) REF(AHConnection(ah, conn))
 parse_auth_header(struct mg_connection FINAL *conn, char NULLTERMSTR FINAL *buf,
                   size_t buf_size, struct ah FINAL *ah)
   OKEXTERN;
 
-int check_password(const char NULLTERMSTR FINAL * NNSTRINGPTR method,
-                   const char NULLTERMSTR FINAL * STRINGPTR ha1,
-                   const char NULLTERMSTR FINAL * STRINGPTR uri,
-                   const char NULLTERMSTR FINAL * NNSTRINGPTR nonce,
-                   const char NULLTERMSTR FINAL * NNSTRINGPTR nc,
-                   const char NULLTERMSTR FINAL * NNSTRINGPTR cnonce,
-                   const char NULLTERMSTR FINAL * NNSTRINGPTR qop,
-                   const char NULLTERMSTR FINAL * NNSTRINGPTR response)
+struct pw_ent {
+  char NULLTERMSTR * STRINGPTR I FINAL user;
+  char NULLTERMSTR * STRINGPTR I FINAL domain;
+  char NULLTERMSTR * STRINGPTR I FINAL ha1;
+};
+
+#define NNOK_PW(__s)                                           \
+  NNREF(&&[FILE([DEREF([V])]) = FILE([__s]);                   \
+           FILE([DEREF([V+4])]) = FILE([__s]);                 \
+           FILE([DEREF([V+8])]) = FILE([__s])])
+
+struct pw_ent * NNOK NNOK_PW(line)
+parse_password_line(char NULLTERMSTR * STRINGPTR line) OKEXTERN;
+  
+int
+check_password(const char NULLTERMSTR FINAL * NNSTRINGPTR I method,
+               const char NULLTERMSTR FINAL * NNSTRINGPTR I ha1,
+               const char NULLTERMSTR FINAL * NNSTRINGPTR I uri,
+               const char NULLTERMSTR FINAL * NNSTRINGPTR I nonce,
+               const char NULLTERMSTR FINAL * NNSTRINGPTR I nc,
+               const char NULLTERMSTR FINAL * NNSTRINGPTR I cnonce,
+               const char NULLTERMSTR FINAL * NNSTRINGPTR I qop,
+               const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) NNSTRINGPTR I response)
   OKEXTERN;
 
 int must_hide_file(struct mg_connection *conn, const char *path);
 void handle_propfind(struct mg_connection *conn, const char *path,
                      struct file *filep);
-int substitute_index_file(struct mg_connection *conn, char *path,
-                          size_t path_len, struct file *filep);
+
+// For given directory path, substitute it to valid index file.
+// Return 0 if index file has been found, -1 if not found.
+// If the file is found, it's stats is returned in stp.
+int substitute_index_file(struct mg_connection *conn,
+                          char NULLTERMSTR *path,
+                          size_t path_len,
+                          struct file *filep) OKEXTERN;
 
 #warning "incomplete type for dir_scan_callback?"
 void dir_scan_callback(struct de *de, struct dir_scan_data *data) OKEXTERN;
@@ -510,7 +556,7 @@ int scan_directory(struct mg_connection *conn,
                    struct dir_scan_data *ds,
                    void (*cb)(struct de *, struct dir_scan_data *)) OKEXTERN;
 
-int compare_dir_entries(struct de *de1, struct de *de2) OKEXTERN;
+int compare_dir_entries(const struct de *de1, const struct de *de2) OKEXTERN;
 
 void print_dir_entry(struct de *de) OKEXTERN;
 void print_dir_entries(struct dir_scan_data FINAL *data) OKEXTERN;
@@ -634,7 +680,7 @@ int mg_write(struct mg_connection *, const void *buf, size_t len);
 // Works exactly like mg_write(), but allows to do message formatting.
 // CSOLVE:
 //   AUTH(conn) || TRUSTED(fmt)
-int mg_printf(struct mg_connection *,
+int mg_printf(struct mg_connection * OK OK_CONN,
               PRINTF_FORMAT_STRING(const char *fmt), ...) PRINTF_ARGS(2, 3) OKEXTERN;
 void mg_printf_inc(struct mg_connection *conn, const char *fmt, ...) PRINTF_ARGS(2, 3) OKEXTERN;
 

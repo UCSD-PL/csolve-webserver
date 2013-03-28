@@ -17,7 +17,7 @@
 # -DUSE_LUA               - embed Lua in Mongoose (+100kb)
 
 PROG        = mongoose
-CFLAGS      = -std=c99 -O2 -W -Wall -pedantic -pthread $(COPT)
+CFLAGS      = -I /Users/abakst/Research/csolve/lib -std=c99 -O2 -W -Wall -pedantic -pthread $(COPT)
 CSOLVE=~/scratch/csolve/src/csolve
 
 # To build with Lua, download and unzip Lua 5.2.1 source code into the
@@ -88,7 +88,7 @@ linux:
 
 mac: bsd
 bsd:
-	$(CC) mg_connection.c mongoose.c main.c -o $(PROG) $(CFLAGS)
+	$(CC) mg_util.c mg_connection.c mongoose.c main.c -o $(PROG) $(CFLAGS)
 
 verify_%:
 	$(CSOLVE) $(CSOLVE_FLAGS) -I include32/usr/include -c $*
@@ -105,7 +105,7 @@ solaris:
 # For codesign to work in non-interactive mode, unlock login keychain:
 # security unlock ~/Library/Keychains/login.keychain
 # See e.g. http://lists.apple.com/archives/apple-cdsa/2008/Jan/msg00027.html
-Mongoose: mg_connection.c mongoose.c main.c
+Mongoose: mg_util.c mg_connection.c mongoose.c main.c
 	$(CC) mg_connection.c mongoose.c main.c build/lsqlite3.c build/sqlite3.c \
           -DUSE_COCOA $(CFLAGS) -I$(LUA) -Ibuild \
           $(YASSL_SOURCES) $(YASSL_FLAGS) -DNO_SSL_DL \
