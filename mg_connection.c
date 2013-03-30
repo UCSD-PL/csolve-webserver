@@ -5,6 +5,8 @@
 #define ERRNO errno
 
 #include "mongoose.h"
+#include "mongoose-policy.h"
+#include "mg_util.h"
 
 #ifdef DEBUG_TRACE
 #undef DEBUG_TRACE
@@ -30,6 +32,12 @@
 #ifdef CIL
 void assert_same_file(void * REF(FILE([V]) = FILE([p2])) p1,
                       void * p2) OKEXTERN;
+
+void assert_eq_strings(char NULLTERMSTR FINAL * STRINGPTR p,
+                       char NULLTERMSTR FINAL  *STRINGPTR REF(STRING([p]) = STRING([V])) q) OKEXTERN;
+
+void assert_pw_ok(struct mg_connection * START OK REF(? PASSWORD_OK([CONN([V]);FILE([f])])) c,
+                  struct file *f) OKEXTERN;
 #else
 #define assert_same_file(__x,__y)
 #endif
@@ -38,18 +46,21 @@ void assert_same_file(void * REF(FILE([V]) = FILE([p2])) p1,
 
 // V = 1 => Auth(conn)
 // Authorize against the opened passwords file. Return 1 if authorized.
-int
+/* int REF((V != 0) => ? PASSWORD_OK([CONN([conn]);FILE([filep])])) */
+int REF((V != 0) => ? AUTHORIZED([CONN([conn])]))
 authorize(struct mg_connection * OK OK_CONN conn,
-          struct file          * OK filep)
+          struct file          * OK REF(?AUTH_FILE([CONN([conn]);FILE([V])])) filep)
 {
   struct ah ah;
   struct pw_ent *pw;
   char *auth_domain;
   char *line, *f_user, *ha1, *f_domain, buf[MG_BUF_LEN], *p;
+  int qed;
 
   if (!parse_auth_header(conn, buf, sizeof(buf), &ah)) {
     return 0;
   }
+
   // Loop over passwords file
   p = (char *) filep->membuf;
   while ((line = mg_readline(256, filep, &p)) != NULL)
@@ -68,90 +79,89 @@ authorize(struct mg_connection * OK OK_CONN conn,
         && auth_domain
         && !strcmp(auth_domain, f_domain))
     {
-
-      assert_same_file(f_user, filep);
-      assert_same_file(ha1,    filep);
-      return check_password(conn->request_info.request_method, ha1, ah.uri,
-                            ah.nonce, ah.nc, ah.cnonce, ah.qop, ah.response);
+      if (check_password(conn->request_info.request_method, ha1, ah.uri,
+                         ah.nonce, ah.nc, ah.cnonce, ah.qop, ah.response))
+      {
+        qed = mg_authorized_def(conn, &ah, filep, f_user, f_domain);
+        return 1;
+      }
     }
   }
 
   return 0;
 }
 
+
 // Use the global passwords file, if specified by auth_gpass option,
 // or search for .htpasswd in the requested directory.
-void
+struct file *
 open_auth_file(struct mg_connection   * OK conn,
-               const char NULLTERMSTR * STRINGPTR path,
-               struct file            * OK filep)
+               const char NULLTERMSTR * STRINGPTR path)
 {
-  char name[PATH_MAX];
+  struct file *ret = NULL;
   const char *e, *gpass = conn->ctx->config[GLOBAL_PASSWORDS_FILE];
 
   if (gpass != NULL)
   {
     // Use global passwords file
-    if (!mg_fopen(conn, gpass, "r", filep))
+    if ((ret = mg_fopena(conn, gpass, "r")) == NULL)
     {
       cry(conn, "fopen(%s): %s", gpass, strerror(ERRNO));
     }
   }
-  else if (mg_stat(conn, path, filep) && filep->is_directory)
-  {
-    mg_snprintf(conn, name, sizeof(name), "%s%c%s",
-                path, '/', PASSWORDS_FILE_NAME);
-    mg_fopen(conn, name, "r", filep);
-  }
   else
   {
-    e = strrchr(path, '/');
-    mg_snprintf(conn, name, sizeof(name), "%.*s%c%s",
-                  (ptrdiff_t)e - (ptrdiff_t)path, path, '/', PASSWORDS_FILE_NAME);
-    mg_fopen(conn, name, "r", filep);
+    ret = open_auth_file_aux(conn, path);
   }
+
+  return ret;
 }
 
 /* // Return 1 if request is authorised, 0 otherwise. */
 int
-check_authorization(struct mg_connection * OK_URI OK OK_CONN conn, const NULLTERMSTR char * STRINGPTR path)
+REF((V != 0) => ? AUTHORIZED([CONN([conn])]))
+check_authorization(struct mg_connection * OK_URI OK OK_CONN conn, const NULLTERMSTR char * STRINGPTR path) CHECK_TYPE
 {
-  char fname[PATH_MAX];
-  struct vec uri_vec, filename_vec;
-  const char *list;
-  struct file file = STRUCT_FILE_INITIALIZER;
-  int authorized = 1;
+  char *fname;
+  //  struct file file = STRUCT_FILE_INITIALIZER;
+  struct file *filep;
+  struct file *auth_file;
+  int authorized = 0;
+  int file_ok;
 
   if (!conn->request_info.uri)
     return 0;
 
-  list = conn->ctx->config[PROTECT_URI];
-  while (list && (list = next_option(list, &uri_vec, &filename_vec)) != NULL) {
-#warning "CSOLVE: Possible bug?"
-    /* ABAKST Possible bug here? memcmp vs strcmp?
-       if (uri_vec.ptr && !memcmp(conn->request_infouri, uri_vec.ptr, uri_vec.len)) {
-    */
-    if (uri_vec.ptr && !strcmp(conn->request_info.uri, uri_vec.ptr)) {
-      mg_snprintf(conn, fname, sizeof(fname), "%.*s",
-                  (int) filename_vec.len, filename_vec.ptr);
-      if (!mg_fopen(conn, fname, "r", &file)) {
-        cry(conn, "%s: cannot open %s: %s", __func__, fname, strerror(errno));
-      }
-      break;
+  fname = mg_protect_uri_fname(conn);
+  if (fname && (filep = mg_fopena(conn, fname, "r")) == NULL)
+  {
+    cry(conn, "%s: cannot open %s: %s", __func__, fname, strerror(errno));
+  }
+  else
+  {
+    filep = open_auth_file(conn, path);
+  }
+  
+  /** If there was an auth_file to open, then auth. Otherwise no auth */
+  if (filep)
+  {
+    if(is_file_opened(filep))
+    {
+      //OK
+      file_ok = mg_bless_passwd(conn,filep);
+      authorized = authorize(conn, filep);
+      mg_fclose(filep);
     }
   }
-
-  if (!is_file_opened(&file)) {
-    open_auth_file(conn, path, &file);
-  }
-
-  if (is_file_opened(&file)) {
-    authorized = authorize(conn, &file);
-    mg_fclose(&file);
+  else 
+  {
+    authorized = mg_check_no_auth(conn);
   }
 
   return authorized;
 }
+
+#if !defined(CIL)
 
 int
 is_authorized_for_put(struct mg_connection *conn)
@@ -391,8 +401,6 @@ handle_request(struct mg_connection * OK OK_URI OK_CONN M conn) CHECK_TYPE
   }
 #endif
 }
-
-#if !defined(CIL)
 
 static int getreq(struct mg_connection *conn, char *ebuf, size_t ebuf_len) {
   const char *cl;

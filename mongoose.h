@@ -296,7 +296,7 @@ struct mg_context {
   volatile int stop_flag;         // Should we stop event loop
   SSL_CTX *ssl_ctx;               // SSL context
   )
-  char NULLTERMSTR * NNSTRINGPTR LOC(CTX_CFG) config[NUM_OPTIONS]; // Mongoose configuration parameters
+  char NULLTERMSTR * NNSTRINGPTR LOC(CTX_CFG) I config[NUM_OPTIONS]; // Mongoose configuration parameters
   CSOLVE_HIDE_DECLS
   (
       struct mg_callbacks callbacks;  // User-defined callback function
@@ -430,6 +430,13 @@ mg_fopen(struct mg_connection INST(CTX_CFG,CTX_CFG) FINAL *conn,
          struct file                                      *filep)
   OKEXTERN;
 
+struct file * OK
+REF(V != 0 => (DEREF([V + 16]) > 0))
+mg_fopena(struct mg_connection INST(CTX_CFG,CTX_CFG) FINAL *conn,
+          const char NULLTERMSTR FINAL                     *LOC(CTX_CFG) STRINGPTR path,
+          const char NULLTERMSTR FINAL                     *STRINGPTR mode)
+  OKEXTERN;
+
 int mg_stat(struct mg_connection   FINAL *conn,
             const char NULLTERMSTR       *STRINGPTR path,
             struct file                  *filep)
@@ -497,16 +504,19 @@ int is_file_opened(const struct file FINAL *filep) OKEXTERN;
        DEREF([__ah+20]) > 0;         \
        DEREF([__ah+24]) > 0]
 
-#define AHConnection(__ah, __conn) (V != 0) =>   \
-    &&[CONN([DEREF([__ah+0])])  = CONN([__conn]);        \
+#define AHConnection(__ah, __conn) \
+    &&[CONN([__ah])             = CONN([__conn]); \
+       CONN([DEREF([__ah+0])])  = CONN([__conn]);        \
        CONN([DEREF([__ah+4])])  = CONN([__conn]);        \
-       CONN([DEREF([__ah+8])])  = CONN([__conn]);        \
+       CONN([DEREF([__ah+8])])  = CONN([__conn]);         \
        CONN([DEREF([__ah+12])]) = CONN([__conn]);         \
        CONN([DEREF([__ah+16])]) = CONN([__conn]);         \
        CONN([DEREF([__ah+20])]) = CONN([__conn]);         \
        CONN([DEREF([__ah+24])]) = CONN([__conn])]
+
+#define AHConnectionCond(__ah, __conn) (V != 0) => AHConnection(__ah, __conn)
     
-int REF(AHParsed(ah)) REF(AHConnection(ah, conn))
+int REF(AHParsed(ah)) REF(AHConnectionCond(ah, conn))
 parse_auth_header(struct mg_connection FINAL *conn, char NULLTERMSTR FINAL *buf,
                   size_t buf_size, struct ah FINAL *ah)
   OKEXTERN;
@@ -525,15 +535,20 @@ struct pw_ent {
 struct pw_ent * NNOK NNOK_PW(line)
 parse_password_line(char NULLTERMSTR * STRINGPTR line) OKEXTERN;
   
-int
-check_password(const char NULLTERMSTR FINAL * NNSTRINGPTR I method,
-               const char NULLTERMSTR FINAL * NNSTRINGPTR I ha1,
-               const char NULLTERMSTR FINAL * NNSTRINGPTR I uri,
-               const char NULLTERMSTR FINAL * NNSTRINGPTR I nonce,
-               const char NULLTERMSTR FINAL * NNSTRINGPTR I nc,
-               const char NULLTERMSTR FINAL * NNSTRINGPTR I cnonce,
-               const char NULLTERMSTR FINAL * NNSTRINGPTR I qop,
-               const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) NNSTRINGPTR I response)
+int REF((V != 0) => ? PASSWORD_OK([CONN([method]);FILE([ha1])]))
+check_password(
+  //From the connection
+  const char NULLTERMSTR FINAL * NNSTRINGPTR I method,
+  //From the PWD file
+  const char NULLTERMSTR FINAL * NNSTRINGPTR I ha1,
+  //From the auth header
+  const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) NNSTRINGPTR I uri,
+  const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) NNSTRINGPTR I nonce,
+  const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) NNSTRINGPTR I nc,
+  const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) NNSTRINGPTR I cnonce,
+  const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) NNSTRINGPTR I qop,
+  const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) NNSTRINGPTR I response
+  )
   OKEXTERN;
 
 int must_hide_file(struct mg_connection *conn, const char *path);
