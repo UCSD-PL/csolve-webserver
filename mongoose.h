@@ -37,17 +37,16 @@
 #endif // O_BINARY
 #define closesocket(a) close(a)
 #define mg_mkdir(x, y) mkdir(x, y)
-#define mg_remove(x) remove(x)
+//#define mg_remove(x) remove(x)
 #define mg_sleep(x) usleep((x) * 1000)
 #define ERRNO errno
 #define INVALID_SOCKET (-1)
 #define INT64_FMT PRId64
 typedef int SOCKET;
 #define WINCDECL
-
 #define MG_BUF_LEN 8192
 #define PASSWORDS_FILE_NAME ".htpasswd"
-extern const char *http_500_error;
+extern const char NULLTERMSTR *http_500_error OKEXTERN;
 
 // Macros for enabling compiler-specific checks for printf-like arguments.
 #undef PRINTF_FORMAT_STRING
@@ -192,6 +191,10 @@ enum {
 
 #define NOPTIONS 24
 
+//Handy
+#define PUT_FILE_CONFIG(__c) DEREF([(DEREF([__c+20]):ptr)+8])
+#define OK_PUT(__c) ?AUTHORIZED_BY([CONN([__c]);(PUT_FILE_CONFIG(__c):int)])
+
 static const char *config_options[] = {
   "cgi_pattern", "**.cgi$|**.pl$|**.php$",
   "cgi_environment", NULL,
@@ -296,7 +299,8 @@ struct mg_context {
   volatile int stop_flag;         // Should we stop event loop
   SSL_CTX *ssl_ctx;               // SSL context
   )
-  char NULLTERMSTR * NNSTRINGPTR LOC(CTX_CFG) I config[NUM_OPTIONS]; // Mongoose configuration parameters
+  char NULLTERMSTR *
+  NNSTRINGPTR LOC(CTX_CFG) I (FINAL config)[NUM_OPTIONS]; // Mongoose configuration parameters
   CSOLVE_HIDE_DECLS
   (
       struct mg_callbacks callbacks;  // User-defined callback function
@@ -344,7 +348,7 @@ struct mg_request_info {
 
 struct mg_connection {
   struct mg_request_info request_info;
-  struct mg_context INST(CTX_CFG,CTX_CFG) * OK ctx;
+  struct mg_context INST(CTX_CFG,CTX_CFG) * OK FINAL ctx;
   CSOLVE_HIDE_DECLS
   (
     SSL *ssl;                   // SSL descriptor
@@ -411,7 +415,10 @@ void send_http_error(struct mg_connection *, int, const char NULLTERMSTR *,
                             PRINTF_FORMAT_STRING(const char NULLTERMSTR *fmt), ...)
   PRINTF_ARGS(4, 5) OKEXTERN;
 void send_options(struct mg_connection *conn);
-void put_file(struct mg_connection *conn, const char *path);
+
+void put_file(struct mg_connection   FINAL * OK REF(OK_PUT(V)) conn,
+              const char NULLTERMSTR FINAL * STRINGPTR path)
+  OKEXTERN;
 
 int mg_snprintf(struct mg_connection *conn,
                 char NULLTERMSTR * STRINGPTR /* SIZE_GE(buflen)  */buf,
@@ -420,7 +427,7 @@ int mg_snprintf(struct mg_connection *conn,
                 /* PRINTF_FORMAT_STRING(const char *fmt), ...) */
   PRINTF_ARGS(4, 5) OKEXTERN;
 
-int mg_remove(const char *path);
+int mg_remove(const char NULLTERMSTR FINAL * STRINGPTR path) OKEXTERN;
 
 int
 REF(V != 0 => (DEREF([filep + 16]) > 0))
@@ -432,6 +439,7 @@ mg_fopen(struct mg_connection INST(CTX_CFG,CTX_CFG) FINAL *conn,
 
 struct file * OK
 REF(V != 0 => (DEREF([V + 16]) > 0))
+REF((?MUTABLE([BLOCK_BEGIN([path])]) => (0 = 1)) => (FILE([V]) = (path : int)))
 mg_fopena(struct mg_connection INST(CTX_CFG,CTX_CFG) FINAL *conn,
           const char NULLTERMSTR FINAL                     *LOC(CTX_CFG) STRINGPTR path,
           const char NULLTERMSTR FINAL                     *STRINGPTR mode)
@@ -453,7 +461,7 @@ mg_fgets(char NULLTERMSTR * OK STRINGPTR buf, size_t size, struct file INST(MB,M
   OKEXTERN;
 
 void cry(struct mg_connection FINAL * OK conn,
-                PRINTF_FORMAT_STRING(const char NULLTERMSTR *fmt), ...)
+         PRINTF_FORMAT_STRING(const char NULLTERMSTR *fmt), ...)
   PRINTF_ARGS(2, 3) OKEXTERN;
 
 int mg_strcasecmp(const char NULLTERMSTR FINAL * STRINGPTR s1,
@@ -468,10 +476,10 @@ int url_decode(const char NULLTERMSTR FINAL * STRINGPTR SIZE_GE(src_len) LOC(S) 
 
 void remove_double_dots_and_double_slashes(char NULLTERMSTR * STRINGPTR M s) OKEXTERN;
 
-void convert_uri_to_file_name(struct mg_connection *conn,
-                              char NULLTERMSTR * STRINGPTR SIZE_GE(buf_len) buf,
-                              size_t buf_len,
-                              struct file * OK M filep) OKEXTERN;
+//Doesn't actually modify any of conn's fields, so conn IS final here
+char NULLTERMSTR * START STRINGPTR REF(CONN([V]) = CONN([conn]))
+convert_uri_to_file_name(struct mg_connection FINAL *conn,
+                         struct file * OK M filep) OKEXTERN;
 
 int set_throttle(const char NULLTERMSTR * NNSTRINGPTR spec,
                  uint32_t remote_ip,
@@ -582,8 +590,11 @@ void handle_ssi_file_request(struct mg_connection *conn,
                              const char *path);
 int is_not_modified(const struct mg_connection *conn,
                     const struct file *filep);
-void handle_file_request(struct mg_connection *conn, const char *path,
-                         struct file *filep);
+
+void handle_file_request(struct mg_connection * OK /* OK_URI OK_CONN */ REF(?AUTHORIZED([CONN([V])])) conn,
+                         const char NULLTERMSTR FINAL *path,
+                         struct file *filep) OKEXTERN;
+
 void reset_per_request_attributes(struct mg_connection *conn);
 int read_request(FILE *fp, struct mg_connection *conn,
                  char *buf, int bufsiz, int *nread);

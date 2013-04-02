@@ -1353,12 +1353,13 @@ int mg_get_cookie(const struct mg_connection *conn, const char *cookie_name,
   return len;
 }
 
-void convert_uri_to_file_name(struct mg_connection *conn, char *buf,
-                              size_t buf_len, struct file *filep) {
+convert_uri_to_file_name(struct mg_connection *conn, struct file *filep) {
   struct vec a, b;
   const char *rewrite, *uri = conn->request_info.uri;
   char *p;
   int match_len;
+  size_t buf_len = PATH_MAX;
+  char *buf = malloc(buf_len);
 
   // Using buf_len - 1 because memmove() for PATH_INFO may shift part
   // of the path one byte on the right.
@@ -1397,6 +1398,8 @@ void convert_uri_to_file_name(struct mg_connection *conn, char *buf,
       }
     }
   }
+
+  return buf;
 }
 
 // Check whether full request is buffered. Return:

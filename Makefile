@@ -91,7 +91,7 @@ bsd:
 	$(CC) mg_util.c mg_connection.c mongoose.c main.c -o $(PROG) $(CFLAGS)
 
 verify_%:
-	$(CSOLVE) $(CSOLVE_FLAGS) -I include32/usr/include -c $*
+	$(CSOLVE) $(CSOLVE_FLAGS) -I include32/usr/include -I /usr/include -c $*
 
 bsd_yassl:
 	$(CC) mongoose.c main.c build/lsqlite3.c build/sqlite3.c -o $(PROG) \

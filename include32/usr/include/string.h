@@ -145,8 +145,8 @@ strncat (char NULLTERMSTR MEMPRED(DOMAIN) * LOC(S) SIZE_GE(__n) START STRINGPTR 
          size_t __n) __THROW __nonnull ((1, 2)) OKEXTERN;
 
 #define STRCMPWITNESS                                                   \
-  REF(V = 0 =>                                                          \
-      &&[? MUTABLE([BLOCK_BEGIN([__s1])]) => (0 = 1);                   \
+  REF(&&[V = 0;                                                       \ 
+         ? MUTABLE([BLOCK_BEGIN([__s1])]) => (0 = 1);                   \
          ? MUTABLE([BLOCK_BEGIN([__s2])]) => (0 = 1)] =>                \
       (STRING([__s1]) = STRING([__s2])))
 /* Compare S1 and S2.  */

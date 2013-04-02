@@ -5,8 +5,8 @@
 #define ERRNO errno
 
 #include "mongoose.h"
-#include "mongoose-policy.h"
 #include "mg_util.h"
+#include "mongoose-policy.h"
 
 #ifdef DEBUG_TRACE
 #undef DEBUG_TRACE
@@ -46,9 +46,9 @@ void assert_pw_ok(struct mg_connection * START OK REF(? PASSWORD_OK([CONN([V]);F
 
 // V = 1 => Auth(conn)
 // Authorize against the opened passwords file. Return 1 if authorized.
-/* int REF((V != 0) => ? PASSWORD_OK([CONN([conn]);FILE([filep])])) */
-int REF((V != 0) => ? AUTHORIZED([CONN([conn])]))
-authorize(struct mg_connection * OK OK_CONN conn,
+int
+REF((V != 0) => ? AUTHORIZED_BY([CONN([conn]);FILE([filep])]))
+authorize(struct mg_connection FINAL * OK OK_CONN conn,
           struct file          * OK REF(?AUTH_FILE([CONN([conn]);FILE([V])])) filep)
 {
   struct ah ah;
@@ -91,7 +91,6 @@ authorize(struct mg_connection * OK OK_CONN conn,
   return 0;
 }
 
-
 // Use the global passwords file, if specified by auth_gpass option,
 // or search for .htpasswd in the requested directory.
 struct file *
@@ -117,10 +116,10 @@ open_auth_file(struct mg_connection   * OK conn,
   return ret;
 }
 
-/* // Return 1 if request is authorised, 0 otherwise. */
+// Return 1 if request is authorised, 0 otherwise.
 int
 REF((V != 0) => ? AUTHORIZED([CONN([conn])]))
-check_authorization(struct mg_connection * OK_URI OK OK_CONN conn, const NULLTERMSTR char * STRINGPTR path) CHECK_TYPE
+check_authorization(struct mg_connection * OK_URI OK OK_CONN conn, const NULLTERMSTR char * STRINGPTR path)
 {
   char *fname;
   //  struct file file = STRUCT_FILE_INITIALIZER;
@@ -128,6 +127,7 @@ check_authorization(struct mg_connection * OK_URI OK OK_CONN conn, const NULLTER
   struct file *auth_file;
   int authorized = 0;
   int file_ok;
+  int qed;
 
   if (!conn->request_info.uri)
     return 0;
@@ -150,29 +150,31 @@ check_authorization(struct mg_connection * OK_URI OK OK_CONN conn, const NULLTER
       //OK
       file_ok = mg_bless_passwd(conn,filep);
       authorized = authorize(conn, filep);
-      mg_fclose(filep);
+      if (authorized) {
+        qed = mg_authorized_erase_file(conn,filep);
+        mg_fclose(filep);
+        return 1;
+      }
+      return 0;
     }
   }
-  else 
-  {
-    authorized = mg_check_no_auth(conn);
-  }
 
-  return authorized;
+  return mg_check_no_auth(conn);
 }
 
-#if !defined(CIL)
-
 int
-is_authorized_for_put(struct mg_connection *conn)
+REF((V != 0) => OK_PUT(conn))
+is_authorized_for_put(struct mg_connection * OK_URI OK OK_CONN conn)
 {
-  struct file file = STRUCT_FILE_INITIALIZER;
+  struct file *filep;
   const char *passfile = conn->ctx->config[PUT_DELETE_PASSWORDS_FILE];
   int ret = 0;
+  int file_ok;
 
-  if (passfile != NULL && mg_fopen(conn, passfile, "r", &file)) {
-    ret = authorize(conn, &file);
-    mg_fclose(&file);
+  if (passfile != NULL && (filep = mg_fopena(conn, passfile, "r")) != NULL) {
+    file_ok = mg_bless_passwd(conn,filep);
+    ret = authorize(conn, filep);
+    mg_fclose(filep);
   }
 
   return ret;
@@ -246,35 +248,43 @@ handle_directory_request(struct mg_connection * OK M conn,
 // and Mongoose must decide what action to take: serve a file, or
 // a directory, or call embedded function, etcetera.
 void
-handle_request(struct mg_connection * OK OK_URI OK_CONN M conn) CHECK_TYPE
+handle_request(struct mg_connection * OK OK_URI OK_CONN M conn)
+  CHECK_TYPE
 {
   struct mg_request_info *ri = &conn->request_info;
-  char path[PATH_MAX];
+  char *path;
   int uri_len, ssl_index;
+  int is_put;
+  int auth_get;
   struct file file = STRUCT_FILE_INITIALIZER;
   char *query_string = NULL;
   char *uri = NULL;
+  int x;
 
   if ((uri = ri->uri) == NULL)
     return;
 
-  if ((query_string = strchr(ri->uri, '?')) != NULL)
-  {
-    if (*query_string) {
-      * ((char *) query_string++) = '\0';
-    } else {
-      query_string = NULL;
-    }
-  }
-  conn->request_info.query_string = query_string;
-  uri_len = (int) strlen(uri);
-  url_decode(uri, uri_len, (char *) uri, uri_len + 1, 0);
-  remove_double_dots_and_double_slashes((char *) uri);
-  convert_uri_to_file_name(conn, path, sizeof(path), &file);
-  conn->throttle = set_throttle(conn->ctx->config[THROTTLE],
-                                get_remote_ip(conn),
-                                uri);
-  DEBUG_TRACE(("%s", ri->uri));
+  /* if ((query_string = strchr(ri->uri, '?')) != NULL) */
+  /* { */
+  /*   if (*query_string) { */
+  /*     * ((char *) query_string++) = '\0'; */
+  /*   } else { */
+  /*     query_string = NULL; */
+  /*   } */
+  /* } */
+  /* conn->request_info.query_string = query_string; */
+  /* uri_len = (int) strlen(uri); */
+  /* url_decode(uri, uri_len, (char *) uri, uri_len + 1, 0); */
+  /* remove_double_dots_and_double_slashes((char *) uri); */
+  path = convert_uri_to_file_name(conn, &file);
+  /* conn->throttle = set_throttle(conn->ctx->config[THROTTLE], */
+  /*                               get_remote_ip(conn), */
+  /*                               uri); */
+  /* DEBUG_TRACE(("%s", ri->uri)); */
+
+  is_put   = is_put_or_delete_request(conn);
+  auth_get = check_authorization(conn,path);
+
   // Perform redirect and auth checks before calling begin_request() handler.
   // Otherwise, begin_request() would need to perform auth checks and redirects.
 #ifndef CIL
@@ -286,7 +296,7 @@ handle_request(struct mg_connection * OK OK_URI OK_CONN M conn) CHECK_TYPE
   {
     redirect_to_https_port(conn, ssl_index);
   }
-  else if (!is_put_or_delete_request(conn) && !check_authorization(conn, path))
+  else if (!is_put && !auth_get)
   {
     send_authorization_request(conn);
   }
@@ -305,23 +315,48 @@ handle_request(struct mg_connection * OK OK_URI OK_CONN M conn) CHECK_TYPE
 #endif
   else if (!strcmp(ri->request_method, "OPTIONS"))
   {
-    csolve_assert(0);
     send_options(conn);
   }
   else if (conn->ctx->config[DOCUMENT_ROOT] == NULL)
   {
-    csolve_assert(0);
     send_http_error(conn, 404, "Not Found", "Not Found");
   }
 #endif
-  else if (is_put_or_delete_request(conn) &&
-           (conn->ctx->config[PUT_DELETE_PASSWORDS_FILE] == NULL ||
-            is_authorized_for_put(conn) != 1))
+  else if (is_put)
   {
+    if (conn->ctx->config[PUT_DELETE_PASSWORDS_FILE] == NULL ||
+                      !is_authorized_for_put(conn))
+    {
+      send_authorization_request(conn);
+    }
+    else if (ri->request_method &&
+             !strcmp(ri->request_method, mg_freeze_string("PUT")))
+    {
+      if (is_authorized_for_put(conn))
+      {
+        put_file(conn, path);
+      }
+    }
+  }
+  else if (ri->request_method &&
+           !strcmp(ri->request_method, mg_freeze_string("DELETE")))
+  {
+    if (mg_remove(path) == 0) {
+      send_http_error(conn, 200, "OK", "%s", "");
+    } else {
+      send_http_error(conn, 500, http_500_error, "remove(%s): %s", path,
+                      strerror(ERRNO));
+    }
+  }
+#if 0
+  else if (is_put && (conn->ctx->config[PUT_DELETE_PASSWORDS_FILE] == NULL ||
+                      !is_authorized_for_put(conn)))
+  {
+    csolve_assert(0);
     send_authorization_request(conn);
   }
-#ifndef CIL
-  else if (!strcmp(ri->request_method, "PUT"))
+  else if (ri->request_method &&
+           !strcmp(ri->request_method, mg_freeze_string("PUT")))
   {
     csolve_assert(0);
     put_file(conn, path);
@@ -336,6 +371,8 @@ handle_request(struct mg_connection * OK OK_URI OK_CONN M conn) CHECK_TYPE
                       strerror(ERRNO));
     }
   }
+#endif
+#ifndef CIL
   else if ((file.membuf == NULL && file.modification_time == (time_t) 0) ||
            must_hide_file(conn, path))
   {
@@ -394,13 +431,14 @@ handle_request(struct mg_connection * OK OK_URI OK_CONN M conn) CHECK_TYPE
     csolve_assert(0);
     send_http_error(conn, 304, "Not Modified", "%s", "");
   }
+#endif
   else
   {
-    csolve_assert(0);
     handle_file_request(conn, path, &file);
   }
-#endif
 }
+
+#if !defined(CIL)
 
 static int getreq(struct mg_connection *conn, char *ebuf, size_t ebuf_len) {
   const char *cl;
