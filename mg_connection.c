@@ -181,7 +181,7 @@ is_authorized_for_put(struct mg_connection * OK_URI OK OK_CONN conn)
 }
 
 void
-send_authorization_request(struct mg_connection *conn)
+send_authorization_request(struct mg_connection * OK M conn)
 {
   conn->status_code = 401;
   mg_printf(conn,
@@ -193,16 +193,18 @@ send_authorization_request(struct mg_connection *conn)
             (unsigned long) time(NULL));
 }
 
+
 void
-handle_directory_request(struct mg_connection * OK M conn,
-                         const NULLTERMSTR char *dir)
+handle_directory_request(struct mg_connection * OK M REF(?AUTHORIZED([CONN([V])])) conn,
+                         const char NULLTERMSTR * STRINGPTR dir)
 {
   int i, sort_direction;
   struct dir_scan_data data = { NULL, 0, 128 };
 
   if (!scan_directory(conn, dir, &data, dir_scan_callback)) {
     send_http_error(conn, 500, "Cannot open directory",
-                    "Error: opendir(%s): %s", dir, strerror(ERRNO));
+                    "Error: opendir");
+                    /* "Error: opendir(%s): %s", dir, strerror(ERRNO)); */
     return;
   }
 
@@ -253,6 +255,7 @@ handle_request(struct mg_connection * OK OK_URI OK_CONN M conn)
 {
   struct mg_request_info *ri = &conn->request_info;
   char *path;
+  char *errstr = NULL;
   int uri_len, ssl_index;
   int is_put;
   int auth_get;
@@ -264,23 +267,23 @@ handle_request(struct mg_connection * OK OK_URI OK_CONN M conn)
   if ((uri = ri->uri) == NULL)
     return;
 
-  /* if ((query_string = strchr(ri->uri, '?')) != NULL) */
-  /* { */
-  /*   if (*query_string) { */
-  /*     * ((char *) query_string++) = '\0'; */
-  /*   } else { */
-  /*     query_string = NULL; */
-  /*   } */
-  /* } */
-  /* conn->request_info.query_string = query_string; */
-  /* uri_len = (int) strlen(uri); */
-  /* url_decode(uri, uri_len, (char *) uri, uri_len + 1, 0); */
-  /* remove_double_dots_and_double_slashes((char *) uri); */
+  if ((query_string = strchr(ri->uri, '?')) != NULL)
+  {
+    if (*query_string) {
+      * ((char *) query_string++) = '\0';
+    } else {
+      query_string = NULL;
+    }
+  }
+  conn->request_info.query_string = query_string;
+  uri_len = (int) strlen(uri);
+  url_decode(uri, uri_len, (char *) uri, uri_len + 1, 0);
+  remove_double_dots_and_double_slashes((char *) uri);
   path = convert_uri_to_file_name(conn, &file);
-  /* conn->throttle = set_throttle(conn->ctx->config[THROTTLE], */
-  /*                               get_remote_ip(conn), */
-  /*                               uri); */
-  /* DEBUG_TRACE(("%s", ri->uri)); */
+  conn->throttle = set_throttle(conn->ctx->config[THROTTLE],
+                                get_remote_ip(conn),
+                                uri);
+  DEBUG_TRACE(("%s", ri->uri));
 
   is_put   = is_put_or_delete_request(conn);
   auth_get = check_authorization(conn,path);
@@ -296,7 +299,33 @@ handle_request(struct mg_connection * OK OK_URI OK_CONN M conn)
   {
     redirect_to_https_port(conn, ssl_index);
   }
-  else if (!is_put && !auth_get)
+  else if (is_put)
+  {
+    if (conn->ctx->config[PUT_DELETE_PASSWORDS_FILE] == NULL ||
+                      !is_authorized_for_put(conn))
+    {
+      send_authorization_request(conn);
+    }
+    else if (ri->request_method &&
+             !strcmp(ri->request_method, mg_freeze_string("PUT")))
+    {
+      if (is_authorized_for_put(conn))
+      {
+        put_file(conn, path);
+      }
+    }
+    else if (ri->request_method &&
+             !strcmp(ri->request_method, mg_freeze_string("DELETE")))
+      {
+        if (mg_remove(path) == 0) {
+          send_http_error(conn, 200, "OK", "");
+        } else {
+//          asprintf(&errstr, "remove(%s): %s", path, strerror(ERRNO));
+          send_http_error(conn, 500, http_500_error, "remove");
+        }
+      }
+  }
+  else if (!auth_get)
   {
     send_authorization_request(conn);
   }
@@ -313,66 +342,18 @@ handle_request(struct mg_connection * OK OK_URI OK_CONN M conn)
     handle_websocket_request(conn);
   }
 #endif
-  else if (!strcmp(ri->request_method, "OPTIONS"))
+#endif
+  else if (ri->request_method && !strcmp(ri->request_method, "OPTIONS"))
   {
+    /* csolve_assert(auth_get); */
+    /* csolve_assert(0); */
     send_options(conn);
   }
+#ifndef CIL
   else if (conn->ctx->config[DOCUMENT_ROOT] == NULL)
   {
     send_http_error(conn, 404, "Not Found", "Not Found");
   }
-#endif
-  else if (is_put)
-  {
-    if (conn->ctx->config[PUT_DELETE_PASSWORDS_FILE] == NULL ||
-                      !is_authorized_for_put(conn))
-    {
-      send_authorization_request(conn);
-    }
-    else if (ri->request_method &&
-             !strcmp(ri->request_method, mg_freeze_string("PUT")))
-    {
-      if (is_authorized_for_put(conn))
-      {
-        put_file(conn, path);
-      }
-    }
-  }
-  else if (ri->request_method &&
-           !strcmp(ri->request_method, mg_freeze_string("DELETE")))
-  {
-    if (mg_remove(path) == 0) {
-      send_http_error(conn, 200, "OK", "%s", "");
-    } else {
-      send_http_error(conn, 500, http_500_error, "remove(%s): %s", path,
-                      strerror(ERRNO));
-    }
-  }
-#if 0
-  else if (is_put && (conn->ctx->config[PUT_DELETE_PASSWORDS_FILE] == NULL ||
-                      !is_authorized_for_put(conn)))
-  {
-    csolve_assert(0);
-    send_authorization_request(conn);
-  }
-  else if (ri->request_method &&
-           !strcmp(ri->request_method, mg_freeze_string("PUT")))
-  {
-    csolve_assert(0);
-    put_file(conn, path);
-  }
-  else if (!strcmp(ri->request_method, "DELETE"))
-  {
-    csolve_assert(0);
-    if (remove(path) == 0) {
-      send_http_error(conn, 200, "OK", "%s", "");
-    } else {
-      send_http_error(conn, 500, http_500_error, "remove(%s): %s", path,
-                      strerror(ERRNO));
-    }
-  }
-#endif
-#ifndef CIL
   else if ((file.membuf == NULL && file.modification_time == (time_t) 0) ||
            must_hide_file(conn, path))
   {
@@ -423,15 +404,14 @@ handle_request(struct mg_connection * OK OK_URI OK_CONN M conn)
                         strlen(conn->ctx->config[SSI_EXTENSIONS]),
                         path) > 0)
   {
-    csolve_assert(0);
     handle_ssi_file_request(conn, path);
   }
+#endif
   else if (is_not_modified(conn, &file))
   {
-    csolve_assert(0);
-    send_http_error(conn, 304, "Not Modified", "%s", "");
+    //send_http_error(conn, 304, "Not Modified", "%s", "");
+    send_http_error(conn, 304, "Not Modified", "");
   }
-#endif
   else
   {
     handle_file_request(conn, path, &file);

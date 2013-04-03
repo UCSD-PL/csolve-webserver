@@ -411,10 +411,18 @@ struct ah {
 //////////////////////////////////////////////////////
 // ABAKST Expose functions to mg_connection (et al?)
 //////////////////////////////////////////////////////
-void send_http_error(struct mg_connection *, int, const char NULLTERMSTR *,
-                            PRINTF_FORMAT_STRING(const char NULLTERMSTR *fmt), ...)
-  PRINTF_ARGS(4, 5) OKEXTERN;
-void send_options(struct mg_connection *conn);
+
+// Very interesting here. Some policies from www.w3c.org
+//   304: Respond with 304 if client is authorized
+#define W3C_HTTP_ERRORS \
+  REF((err = 304) => ? AUTHORIZED([CONN([V])]))
+void send_http_error(struct mg_connection * W3C_HTTP_ERRORS conn,
+                     int err,
+                     const char NULLTERMSTR * s1,
+                     const char NULLTERMSTR * s2)
+                     /* PRINTF_FORMAT_STRING(const char NULLTERMSTR *fmt), ...) */
+  /* PRINTF_ARGS(4, 5) */ OKEXTERN;
+void send_options(struct mg_connection FINAL * OK REF(?AUTHORIZED([CONN([V])])) conn) OKEXTERN;
 
 void put_file(struct mg_connection   FINAL * OK REF(OK_PUT(V)) conn,
               const char NULLTERMSTR FINAL * STRINGPTR path)
@@ -588,8 +596,8 @@ int match_prefix(const char *pattern, int pattern_len, const char *str);
 void handle_cgi_request(struct mg_connection *conn, const char *prog);
 void handle_ssi_file_request(struct mg_connection *conn,
                              const char *path);
-int is_not_modified(const struct mg_connection *conn,
-                    const struct file *filep);
+int is_not_modified(const struct mg_connection FINAL *conn,
+                    const struct file *filep) OKEXTERN;
 
 void handle_file_request(struct mg_connection * OK /* OK_URI OK_CONN */ REF(?AUTHORIZED([CONN([V])])) conn,
                          const char NULLTERMSTR FINAL *path,

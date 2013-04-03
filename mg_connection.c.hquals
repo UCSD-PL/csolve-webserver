@@ -37,8 +37,8 @@ constant AUTHORIZED: func(1, [int;bool])
 constant AUTHORIZED_BY: func(1, [int;int;bool])
 qualif AuthorizedWitness(v:int,c:ptr): ? AUTHORIZED([CONN([c])])
 qualif AuthorizedWitness(v:int,c:ptr): ? AUTHORIZED_BY([CONN([c]);FILE([@f])])
-qualif AuthorizedCond(v:int,c:ptr): v != 0 => ? AUTHORIZED([CONN([c])])
-qualif AuthorizedByCond(v:int,c:ptr): v != 0 => ? AUTHORIZED_BY([CONN([c]);FILE([@f])])
+qualif AuthorizedCond(v:int): v != 0 => ? AUTHORIZED([CONN([@c])])
+qualif AuthorizedByCond(v:int): v != 0 => ? AUTHORIZED_BY([CONN([@c]);FILE([@f])])
 
 //PASSWD Files
 constant AUTH_FILE: func(1, [int;int;bool])
@@ -69,3 +69,5 @@ qualif Bool(v:int): ||[v = 0; v = 1]
 
 qualif PutPasswdIdx(v:int): v = 8
 //qualif PutPasswdIdx(v:int): v = (2*4)
+
+qualif Err304(v:int): v = 304 => (?AUTHORIZED([CONN([@c])]))
