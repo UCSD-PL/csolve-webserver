@@ -37,7 +37,6 @@
 #endif // O_BINARY
 #define closesocket(a) close(a)
 #define mg_mkdir(x, y) mkdir(x, y)
-//#define mg_remove(x) remove(x)
 #define mg_sleep(x) usleep((x) * 1000)
 #define ERRNO errno
 #define INVALID_SOCKET (-1)
@@ -416,17 +415,28 @@ struct ah {
 //   304: Respond with 304 if client is authorized
 #define W3C_HTTP_ERRORS \
   REF((err = 304) => ? AUTHORIZED([CONN([V])]))
+#ifdef CIL
 void send_http_error(struct mg_connection * W3C_HTTP_ERRORS conn,
                      int err,
                      const char NULLTERMSTR * s1,
                      const char NULLTERMSTR * s2)
                      /* PRINTF_FORMAT_STRING(const char NULLTERMSTR *fmt), ...) */
   /* PRINTF_ARGS(4, 5) */ OKEXTERN;
+#else
+void send_http_error(struct mg_connection * W3C_HTTP_ERRORS conn,
+                     int err,
+                     const char NULLTERMSTR * s1,
+                     PRINTF_FORMAT_STRING(const char NULLTERMSTR *fmt), ...)
+  PRINTF_ARGS(4, 5);
+#endif
 void send_options(struct mg_connection FINAL * OK REF(?AUTHORIZED([CONN([V])])) conn) OKEXTERN;
 
 void put_file(struct mg_connection   FINAL * OK REF(OK_PUT(V)) conn,
               const char NULLTERMSTR FINAL * STRINGPTR path)
   OKEXTERN;
+int mg_remove(struct mg_connection FINAL   * OK REF(OK_PUT(V)) conn,
+              const char NULLTERMSTR FINAL * STRINGPTR path) OKEXTERN;
+
 
 int mg_snprintf(struct mg_connection *conn,
                 char NULLTERMSTR * STRINGPTR /* SIZE_GE(buflen)  */buf,
@@ -434,8 +444,6 @@ int mg_snprintf(struct mg_connection *conn,
                 const char *fmt,...)
                 /* PRINTF_FORMAT_STRING(const char *fmt), ...) */
   PRINTF_ARGS(4, 5) OKEXTERN;
-
-int mg_remove(const char NULLTERMSTR FINAL * STRINGPTR path) OKEXTERN;
 
 int
 REF(V != 0 => (DEREF([filep + 16]) > 0))
@@ -546,12 +554,15 @@ struct pw_ent {
 #define NNOK_PW(__s)                                           \
   NNREF(&&[FILE([DEREF([V])]) = FILE([__s]);                   \
            FILE([DEREF([V+4])]) = FILE([__s]);                 \
-           FILE([DEREF([V+8])]) = FILE([__s])])
+           FILE([DEREF([V+8])]) = FILE([__s])])                \
+  NNREF(&&[PW_ENT([DEREF([V])]) = V;                           \
+           PW_ENT([DEREF([V+4])]) = V;                         \
+           PW_ENT([DEREF([V+8])]) = V])
 
 struct pw_ent * NNOK NNOK_PW(line)
 parse_password_line(char NULLTERMSTR * STRINGPTR line) OKEXTERN;
   
-int REF((V != 0) => ? PASSWORD_OK([CONN([method]);FILE([ha1])]))
+int REF((V != 0) => ? PASSWORD_OK([CONN([method]);ha1]))
 check_password(
   //From the connection
   const char NULLTERMSTR FINAL * NNSTRINGPTR I method,
@@ -567,9 +578,14 @@ check_password(
   )
   OKEXTERN;
 
-int must_hide_file(struct mg_connection *conn, const char *path);
-void handle_propfind(struct mg_connection *conn, const char *path,
-                     struct file *filep);
+int must_hide_file(struct mg_connection FINAL *conn,
+                   const char NULLTERMSTR * STRINGPTR path)
+  OKEXTERN;
+
+void handle_propfind(struct mg_connection   * M OK OK_CONN REF(?AUTHORIZED([CONN([V])])) conn,
+                     const char NULLTERMSTR * STRINGPTR path,
+                     struct file            * filep)
+  OKEXTERN;
 
 // For given directory path, substitute it to valid index file.
 // Return 0 if index file has been found, -1 if not found.
@@ -592,10 +608,18 @@ int compare_dir_entries(const struct de *de1, const struct de *de2) OKEXTERN;
 void print_dir_entry(struct de *de) OKEXTERN;
 void print_dir_entries(struct dir_scan_data FINAL *data) OKEXTERN;
 
-int match_prefix(const char *pattern, int pattern_len, const char *str);
-void handle_cgi_request(struct mg_connection *conn, const char *prog);
-void handle_ssi_file_request(struct mg_connection *conn,
-                             const char *path);
+int match_prefix(const char FINAL NULLTERMSTR * SIZE_GE(pattern_len) STRINGPTR pattern,
+                 int pattern_len,
+                 const char FINAL NULLTERMSTR * STRINGPTR str) OKEXTERN;
+
+void handle_cgi_request(struct mg_connection * OK REF(?AUTHORIZED([CONN([V])])) conn,
+                        const char FINAL NULLTERMSTR * STRINGPTR prog)
+  OKEXTERN;
+
+void handle_ssi_file_request(struct mg_connection * OK REF(?AUTHORIZED([CONN([V])])) conn,
+                             const char FINAL NULLTERMSTR * STRINGPTR path)
+  OKEXTERN;
+
 int is_not_modified(const struct mg_connection FINAL *conn,
                     const struct file *filep) OKEXTERN;
 

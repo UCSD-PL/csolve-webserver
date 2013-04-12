@@ -6,13 +6,13 @@ qualif ConfigArray(v:ptr): v + 96 <= BLOCK_END([v])
 qualif VectorPtr(v:ptr, a:int): v != 0 => v + a <= BLOCK_END([v])
 
 //Strings
-constant STRING:func(1, [@(0);int])
-qualif StringEq(v:ptr,s:ptr): STRING([v]) = STRING([s])
-qualif StringEqWitness(v:int, p:ptr)://, q:ptr):
-      &&[v = 0;
-         ? MUTABLE([BLOCK_BEGIN([p])]) => (0 = 1);
-         ? MUTABLE([BLOCK_BEGIN([@f_])]) => (0 = 1)] =>
-      (STRING([p]) = STRING([@f_]))
+//constant STRING:func(1, [@(0);int])
+//qualif StringEq(v:ptr,s:ptr): STRING([v]) = STRING([s])
+//qualif StringEqWitness(v:int, p:ptr)://, q:ptr):
+//      &&[v = 0;
+//         ? MUTABLE([BLOCK_BEGIN([p])]) => (0 = 1);
+//         ? MUTABLE([BLOCK_BEGIN([@f_])]) => (0 = 1)] =>
+//      (STRING([p]) = STRING([@f_]))
 
 //Qualifier for connections
 constant CONN: func(1, [@(0);int])
@@ -28,46 +28,53 @@ qualif PWFileEq(v:ptr,f:ptr): (v != 0) => && [FILE([DEREF([v + 0])]) = FILE([f])
 qualif FileOpen(v:ptr,p:ptr):
   (?MUTABLE([BLOCK_BEGIN([p])]) => (0 = 1)) => (FILE([v]) = (p : int))
 
-//Password Checking
-constant PASSWORD_OK: func(1, [int;int;bool])
-qualif PasswordOK(v:int,f:ptr): (v != 0) => ? PASSWORD_OK([CONN([@conn]);FILE([f])])
-
-//Connection Authorization
+////Password Checking
+//constant PASSWORD_OK: func(1, [int;@(0);bool])
+////qualif PasswordOK(v:int,h:ptr): (v != 0) => ? PASSWORD_OK([CONN([@conn]);h])
+//qualif PasswordOK(v:int): (v != 0) => ? PASSWORD_OK([CONN([@conn]);@h])
+//
+////Connection Authorization
 constant AUTHORIZED: func(1, [int;bool])
 constant AUTHORIZED_BY: func(1, [int;int;bool])
-qualif AuthorizedWitness(v:int,c:ptr): ? AUTHORIZED([CONN([c])])
-qualif AuthorizedWitness(v:int,c:ptr): ? AUTHORIZED_BY([CONN([c]);FILE([@f])])
+//qualif AuthorizedWitness(v:int,c:ptr): ? AUTHORIZED([CONN([c])])
+//qualif AuthorizedWitness(v:int,c:ptr): ? AUTHORIZED_BY([CONN([c]);FILE([@f])])
 qualif AuthorizedCond(v:int): v != 0 => ? AUTHORIZED([CONN([@c])])
 qualif AuthorizedByCond(v:int): v != 0 => ? AUTHORIZED_BY([CONN([@c]);FILE([@f])])
-
-//PASSWD Files
-constant AUTH_FILE: func(1, [int;int;bool])
-qualif AuthFile(v:ptr): ?AUTH_FILE([CONN([@c]);FILE([v])])
+//
+////PASSWD Files
+//constant PW_ENT: func(1, [@(0); @(1)])
+//constant AUTH_FILE: func(1, [int;int;bool])
+//qualif AuthFile(v:ptr): ?AUTH_FILE([CONN([@c]);FILE([v])])
 qualif AuthorizedPut(v:int):
   v != 0 => ? AUTHORIZED_BY([CONN([@c]);(DEREF([(DEREF([@c+20]):ptr)+8]):int)])
 
-//Handy when parsing authorization header
-qualif ParsedAH(v:int, a:ptr): (v != 0) =>
-    &&[DEREF([a+0]) > 0;
-       DEREF([a+4]) > 0;
-       DEREF([a+8]) > 0;
-       DEREF([a+12]) > 0;
-       DEREF([a+16]) > 0;
-       DEREF([a+20]) > 0;
-       DEREF([a+24]) > 0;
-       CONN([a])             = CONN([@conn]);
-       CONN([DEREF([a+0])])  = CONN([@conn]);
-       CONN([DEREF([a+4])])  = CONN([@conn]);
-       CONN([DEREF([a+8])])  = CONN([@conn]);
-       CONN([DEREF([a+12])]) = CONN([@conn]);
-       CONN([DEREF([a+16])]) = CONN([@conn]);
-       CONN([DEREF([a+20])]) = CONN([@conn]);
-       CONN([DEREF([a+24])]) = CONN([@conn])]
+//qualif PwEntry(v:ptr): v != 0 => &&[PW_ENT([DEREF([v])]) = v;
+//                                    PW_ENT([DEREF([v+4])]) = v;
+//                                    PW_ENT([DEREF([v+8])]) = v]
+//qualif PwEnt_Eq(v:ptr, w:ptr): PW_ENT([v]) = PW_ENT([w])
+//
+//
+////Handy when parsing authorization header
+//qualif ParsedAH(v:int, a:ptr): (v != 0) =>
+//    &&[DEREF([a+0]) > 0;
+//       DEREF([a+4]) > 0;
+//       DEREF([a+8]) > 0;
+//       DEREF([a+12]) > 0;
+//       DEREF([a+16]) > 0;
+//       DEREF([a+20]) > 0;
+//       DEREF([a+24]) > 0;
+//       CONN([a])             = CONN([@conn]);
+//       CONN([DEREF([a+0])])  = CONN([@conn]);
+//       CONN([DEREF([a+4])])  = CONN([@conn]);
+//       CONN([DEREF([a+8])])  = CONN([@conn]);
+//       CONN([DEREF([a+12])]) = CONN([@conn]);
+//       CONN([DEREF([a+16])]) = CONN([@conn]);
+//       CONN([DEREF([a+20])]) = CONN([@conn]);
+//       CONN([DEREF([a+24])]) = CONN([@conn])]
 
 
 qualif Bool(v:int): ||[v = 0; v = 1]
 
 qualif PutPasswdIdx(v:int): v = 8
-//qualif PutPasswdIdx(v:int): v = (2*4)
 
 qualif Err304(v:int): v = 304 => (?AUTHORIZED([CONN([@c])]))

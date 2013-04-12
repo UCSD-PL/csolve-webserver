@@ -4,6 +4,8 @@
 #include "mg_auth.h"
 #include <errno.h>
 
+char NULLTERMSTR FINAL * I STRINGPTR nondet_string() OKEXTERN;
+
 // V = 1 => Auth(conn)
 // Authorize against the opened passwords file. Return 1 if authorized.
 int
@@ -42,7 +44,7 @@ authorize(struct mg_connection FINAL * OK OK_CONN conn,
       if (check_password(conn->request_info.request_method, ha1, ah.uri,
                          ah.nonce, ah.nc, ah.cnonce, ah.qop, ah.response))
       {
-        qed = mg_authorized_def(conn, &ah, filep, f_user, f_domain);
+        qed = mg_authorized_def(conn, &ah, filep, ha1, f_user, f_domain);
         return 1;
       }
     }
@@ -84,7 +86,7 @@ check_authorization(struct mg_connection * OK OK_CONN conn, const NULLTERMSTR ch
 {
   char *fname;
   //  struct file file = STRUCT_FILE_INITIALIZER;
-  struct file *filep;
+  struct file *filep = NULL;
   struct file *auth_file;
   int authorized = 0;
   int file_ok;
@@ -98,11 +100,11 @@ check_authorization(struct mg_connection * OK OK_CONN conn, const NULLTERMSTR ch
   {
     cry(conn, "%s: cannot open %s: %s", __func__, fname, strerror(errno));
   }
-  else
+  else if (!fname)
   {
     filep = open_auth_file(conn, path);
   }
-  
+
   /** If there was an auth_file to open, then auth. Otherwise no auth */
   if (filep)
   {
@@ -116,11 +118,12 @@ check_authorization(struct mg_connection * OK OK_CONN conn, const NULLTERMSTR ch
         mg_fclose(filep);
         return 1;
       }
-      return 0;
     }
+    return 0;
   }
 
-  return mg_check_no_auth(conn);
+  file_ok = mg_check_no_auth(conn);
+  return 1;
 }
 
 int

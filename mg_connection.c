@@ -170,7 +170,7 @@ handle_request(struct mg_connection * OK OK_URI OK_CONN M conn)
     else if (ri->request_method &&
              !strcmp(ri->request_method, mg_freeze_string("DELETE")))
       {
-        if (mg_remove(path) == 0) {
+        if (mg_remove(conn, path) == 0) {
           send_http_error(conn, 200, "OK", "");
         } else {
 //          asprintf(&errstr, "remove(%s): %s", path, strerror(ERRNO));
@@ -186,45 +186,40 @@ handle_request(struct mg_connection * OK OK_URI OK_CONN M conn)
   else if (conn->ctx->callbacks.begin_request != NULL &&
            conn->ctx->callbacks.begin_request(conn))
   {
-    csolve_assert(0);
+    //    csolve_assert(0);
     // Do nothing, callback has served the request
   }
 #if defined(USE_WEBSOCKET)
   else if (is_websocket_request(conn)) {
-    csolve_assert(0);
+    //csolve_assert(0);
     handle_websocket_request(conn);
   }
 #endif
 #endif
   else if (ri->request_method && !strcmp(ri->request_method, "OPTIONS"))
   {
-    /* csolve_assert(auth_get); */
-    /* csolve_assert(0); */
     send_options(conn);
   }
-#ifndef CIL
   else if (conn->ctx->config[DOCUMENT_ROOT] == NULL)
   {
-    send_http_error(conn, 404, "Not Found", "Not Found");
+    send_http_error(conn, 404, "Not Found", "File not Found");
   }
   else if ((file.membuf == NULL && file.modification_time == (time_t) 0) ||
            must_hide_file(conn, path))
   {
-    csolve_assert(0);
-    send_http_error(conn, 404, "Not Found", "%s", "File not found");
+    /* send_http_error(conn, 404, "Not Found", "%s", "File not found"); */
+    send_http_error(conn, 404, "Not Found", "File not found");
   }
-  else if (file.is_directory && ri->uri[uri_len - 1] != '/')
+  else if (file.is_directory && ri->uri && (uri_len = strlen(ri->uri)) > 0 &&
+           ri->uri[uri_len-1] != '/')
   {
-    csolve_assert(0);
     mg_printf(conn, "HTTP/1.1 301 Moved Permanently\r\n"
               "Location: %s/\r\n\r\n", ri->uri);
   }
-  else if (!strcmp(ri->request_method, "PROPFIND"))
+  else if (ri->request_method && !strcmp(ri->request_method, "PROPFIND"))
   {
-    csolve_assert(0);
     handle_propfind(conn, path, &file);
   }
-#endif
   else if (file.is_directory &&
            !substitute_index_file(conn, path, sizeof(path), &file))
   {
@@ -233,33 +228,33 @@ handle_request(struct mg_connection * OK OK_URI OK_CONN M conn)
       handle_directory_request(conn, path);
     } else {
       send_http_error(conn, 403, "Directory Listing Denied",
-          "Directory listing denied");
+                      "Directory listing denied");
     }
   }
-#ifndef CIL
 #if !defined(NO_CGI)
-  else if (match_prefix(conn->ctx->config[CGI_EXTENSIONS],
+  else if (conn->ctx->config[CGI_EXTENSIONS] &&
+           match_prefix(conn->ctx->config[CGI_EXTENSIONS],
                         strlen(conn->ctx->config[CGI_EXTENSIONS]),
                         path) > 0)
   {
-    csolve_assert(0);
-    if (strcmp(ri->request_method, "POST") &&
+    if (ri->request_method &&
+        strcmp(ri->request_method, "POST") &&
         strcmp(ri->request_method, "HEAD") &&
         strcmp(ri->request_method, "GET")) {
-      send_http_error(conn, 501, "Not Implemented",
-                      "Method %s is not implemented", ri->request_method);
+      send_http_error(conn, 501, "Not Implemented", "Method not implemented");
+      //                      "Method %s is not implemented", ri->request_method);
     } else {
       handle_cgi_request(conn, path);
     }
   }
 #endif // !NO_CGI
-  else if (match_prefix(conn->ctx->config[SSI_EXTENSIONS],
+  else if (conn->ctx->config[SSI_EXTENSIONS] &&
+           match_prefix(conn->ctx->config[SSI_EXTENSIONS],
                         strlen(conn->ctx->config[SSI_EXTENSIONS]),
                         path) > 0)
   {
     handle_ssi_file_request(conn, path);
   }
-#endif
   else if (is_not_modified(conn, &file))
   {
     //send_http_error(conn, 304, "Not Modified", "%s", "");
@@ -317,15 +312,18 @@ void process_new_connection(struct mg_connection *conn) {
   conn->data_len = 0;
   do {
     if (!getreq(conn, ebuf, sizeof(ebuf))) {
-      send_http_error(conn, 500, "Server Error", "%s", ebuf);
+      /* send_http_error(conn, 500, "Server Error", "%s", ebuf); */
+      send_http_error(conn, 500, "Server Error", ebuf);
       conn->must_close = 1;
     } else if (!is_valid_uri(conn->request_info.uri)) {
       snprintf(ebuf, sizeof(ebuf), "Invalid URI: [%s]", ri->uri);
-      send_http_error(conn, 400, "Bad Request", "%s", ebuf);
+      //send_http_error(conn, 400, "Bad Request", "%s", ebuf);
+      send_http_error(conn, 400, "Bad Request", ebuf);
     } else if (strcmp(ri->http_version, "1.0") &&
                strcmp(ri->http_version, "1.1")) {
       snprintf(ebuf, sizeof(ebuf), "Bad HTTP version: [%s]", ri->http_version);
-      send_http_error(conn, 505, "Bad HTTP version", "%s", ebuf);
+      //send_http_error(conn, 505, "Bad HTTP version", "%s", ebuf);
+      send_http_error(conn, 505, "Bad HTTP version", ebuf);
     }
 
     if (ebuf[0] == '\0') {

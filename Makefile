@@ -88,7 +88,7 @@ linux:
 
 mac: bsd
 bsd:
-	$(CC) mg_util.c mg_connection.c mongoose.c main.c -o $(PROG) $(CFLAGS)
+	$(CC) mg_connection.c mg_util.c mg_auth.c mongoose_policy.c mongoose.c main.c -o $(PROG) $(CFLAGS)
 
 verify_%:
 	$(CSOLVE) $(CSOLVE_FLAGS) -I include32/usr/include -I /usr/include -c $*

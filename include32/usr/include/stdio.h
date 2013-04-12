@@ -387,7 +387,7 @@ extern int __asprintf (char ** __restrict __ptr,
      __THROW __attribute__ ((__format__ (__printf__, 2, 3))) __wur;
 extern int asprintf (char * NNSTART NNSTRINGPTR * OK __restrict __ptr,
 		     __const char *__restrict __fmt, ...)
-     __THROW __attribute__ ((__format__ (__printf__, 2, 3))) OKEXTERN __wur;
+     __THROW __attribute__ ((__format__ (__printf__, 2, 3))) __wur OKEXTERN ;
 #endif
 
 #ifdef __USE_XOPEN2K8

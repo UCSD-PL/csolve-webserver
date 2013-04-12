@@ -560,6 +560,14 @@ void send_http_error(struct mg_connection *conn, int status,
   }
 }
 
+int mg_remove(struct mg_connection *conn, const char *path) {
+  remove(path);
+  /* wchar_t wbuf[PATH_MAX]; */
+  /* to_unicode(path, wbuf, ARRAY_SIZE(wbuf)); */
+  /* return DeleteFileW(wbuf) ? 0 : -1; */
+}
+
+
 #if defined(_WIN32) && !defined(__SYMBIAN32__)
 static int pthread_mutex_init(pthread_mutex_t *mutex, void *unused) {
   (void) unused;
@@ -730,12 +738,6 @@ int mg_stat(struct mg_connection *conn, const char *path,
   }
 
   return filep->membuf != NULL || filep->modification_time != 0;
-}
-
-int mg_remove(const char *path) {
-  wchar_t wbuf[PATH_MAX];
-  to_unicode(path, wbuf, ARRAY_SIZE(wbuf));
-  return DeleteFileW(wbuf) ? 0 : -1;
 }
 
 static int mg_mkdir(const char *path, int mode) {
@@ -1353,6 +1355,7 @@ int mg_get_cookie(const struct mg_connection *conn, const char *cookie_name,
   return len;
 }
 
+char *
 convert_uri_to_file_name(struct mg_connection *conn, struct file *filep) {
   struct vec a, b;
   const char *rewrite, *uri = conn->request_info.uri;
