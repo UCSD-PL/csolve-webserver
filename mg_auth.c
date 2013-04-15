@@ -96,9 +96,10 @@ check_authorization(struct mg_connection * OK OK_CONN conn, const NULLTERMSTR ch
     return 0;
 
   fname = mg_protect_uri_fname(conn);
-  if (fname && (filep = mg_fopena(conn, fname, "r")) == NULL)
+  if (fname && ((filep = mg_fopena(conn, fname, "r")) == NULL))
   {
-    cry(conn, "%s: cannot open %s: %s", __func__, fname, strerror(errno));
+    /* cry(conn, "%s: cannot open %s: %s", __func__, fname, strerror(errno)); */
+    return 0;
   }
   else if (!fname)
   {

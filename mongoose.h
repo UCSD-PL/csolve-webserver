@@ -453,9 +453,10 @@ mg_fopen(struct mg_connection INST(CTX_CFG,CTX_CFG) FINAL *conn,
          struct file                                      *filep)
   OKEXTERN;
 
-struct file * OK
+struct file * NNOK
 REF(V != 0 => (DEREF([V + 16]) > 0))
-REF((?MUTABLE([BLOCK_BEGIN([path])]) => (0 = 1)) => (FILE([V]) = (path : int)))
+REF((? MUTABLE([BLOCK_BEGIN([path])]) => (0 = 1)) => (FILE([V]) = (path : int)))
+REF(FILE([V]) = (path : int))
 mg_fopena(struct mg_connection INST(CTX_CFG,CTX_CFG) FINAL *conn,
           const char NULLTERMSTR FINAL                     *LOC(CTX_CFG) STRINGPTR path,
           const char NULLTERMSTR FINAL                     *STRINGPTR mode)

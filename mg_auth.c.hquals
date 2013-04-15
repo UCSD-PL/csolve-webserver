@@ -82,5 +82,5 @@ qualif Err304(v:int): v = 304 => (?AUTHORIZED([CONN([@c])]))
 constant NO_AUTHFILE: func(1, [int;bool])
 constant NO_PROTECTFILE: func(1, [int;bool])
 
-qualif NoAuthfile(v:int): v = 0 => ? NO_AUTHFILE([CONN([@c])])
-qualif NoProtectfile(v:int): v = 0 => ? NO_PROTECTFILE([CONN([@c])])
+qualif NoAuthfile(v:ptr): v = 0 => ? NO_AUTHFILE([CONN([@c])])
+qualif NoProtectfile(v:ptr): v = 0 => ? NO_PROTECTFILE([CONN([@c])])
