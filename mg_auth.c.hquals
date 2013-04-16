@@ -84,3 +84,18 @@ constant NO_PROTECTFILE: func(1, [int;bool])
 
 qualif NoAuthfile(v:ptr): v = 0 => ? NO_AUTHFILE([CONN([@c])])
 qualif NoProtectfile(v:ptr): v = 0 => ? NO_PROTECTFILE([CONN([@c])])
+qualif FpNullGPassNull(v:ptr): v = 0 => (DEREF([(DEREF([@c+20]):ptr)+44]) = 0)
+
+qualif AuthFileDef(v:ptr): || [FILE([v]) = (DEREF([(DEREF([@c+20]):ptr)+44]) : int);
+                               FILE([v]) = (DEREF([(DEREF([@c+20]):ptr)+8])  : int)]
+
+qualif GlobalAuthFile(v:ptr):  v = (DEREF([(DEREF([@c+20]):ptr)+44]) : int)
+qualif PutAuthFile(v:ptr):     v = (DEREF([(DEREF([@c+20]):ptr)+8]) : int)
+
+qualif AuthFilePath(v:ptr): v != 0 => ? AUTH_FILE([CONN([@c]);(v:int)])
+qualif AuthFileOpen(v:ptr): v != 0 => ? AUTH_FILE([CONN([@c]);FILE([v])])
+qualif AuthFileWitness(v:int): ?AUTH_FILE([CONN([@c]);FILE([@r])])
+qualif AuthFileWitness(v:int): ?AUTH_FILE([CONN([@c]);FILE([@f])])
+
+constant URI: func(1, [@(0); int])
+qualif ConnUri(v:ptr,c:ptr): URI([v]) = URI([c])

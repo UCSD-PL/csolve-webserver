@@ -55,10 +55,11 @@ authorize(struct mg_connection FINAL * OK OK_CONN conn,
 
 // Use the global passwords file, if specified by auth_gpass option,
 // or search for .htpasswd in the requested directory.
-struct file *
+struct file * NNSTART NNREF(?AUTH_FILE([CONN([conn]);FILE([V])]))
 open_auth_file(struct mg_connection   * OK conn,
                const char NULLTERMSTR * STRINGPTR path)
 {
+  int qed;
   struct file *ret = NULL;
   const char *e, *gpass = conn->ctx->config[GLOBAL_PASSWORDS_FILE];
 
@@ -68,6 +69,11 @@ open_auth_file(struct mg_connection   * OK conn,
     if ((ret = mg_fopena(conn, gpass, "r")) == NULL)
     {
       cry(conn, "fopen(%s): %s", gpass, strerror(ERRNO));
+    }
+    else
+    {
+      qed = mg_authfile_def(conn, ret);
+      return ret;
     }
   }
   else
@@ -80,7 +86,6 @@ open_auth_file(struct mg_connection   * OK conn,
 
 // Return 1 if request is authorised, 0 otherwise.
 int
-REF((V != 0) => ? AUTHORIZED([CONN([conn])]))
 check_authorization(struct mg_connection * OK OK_CONN conn, const NULLTERMSTR char * STRINGPTR path)
   CHECK_TYPE
 {
@@ -112,7 +117,7 @@ check_authorization(struct mg_connection * OK OK_CONN conn, const NULLTERMSTR ch
     if(is_file_opened(filep))
     {
       //OK
-      file_ok = mg_bless_passwd(conn,filep);
+      /* file_ok = mg_bless_passwd(conn,filep); */
       authorized = authorize(conn, filep);
       if (authorized) {
         qed = mg_authorized_erase_file(conn,filep);
@@ -123,7 +128,7 @@ check_authorization(struct mg_connection * OK OK_CONN conn, const NULLTERMSTR ch
     return 0;
   }
 
-  file_ok = mg_check_no_auth(conn);
+  file_ok = mg_no_auth_file(conn);
   return 1;
 }
 
@@ -135,10 +140,12 @@ is_authorized_for_put(struct mg_connection * OK OK_CONN conn)
   struct file *filep;
   const char *passfile = conn->ctx->config[PUT_DELETE_PASSWORDS_FILE];
   int ret = 0;
+  int qed;
   int file_ok;
 
   if (passfile != NULL && (filep = mg_fopena(conn, passfile, "r")) != NULL) {
-    file_ok = mg_bless_passwd(conn,filep);
+    qed = mg_authfile_def(conn, filep);
+//    file_ok = mg_bless_passwd(conn,filep);
     ret = authorize(conn, filep);
     mg_fclose(filep);
   }

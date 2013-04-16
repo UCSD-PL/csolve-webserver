@@ -432,10 +432,10 @@ void send_http_error(struct mg_connection * W3C_HTTP_ERRORS conn,
 void send_options(struct mg_connection FINAL * OK REF(?AUTHORIZED([CONN([V])])) conn) OKEXTERN;
 
 void put_file(struct mg_connection   FINAL * OK REF(OK_PUT(V)) conn,
-              const char NULLTERMSTR FINAL * STRINGPTR path)
+              const char NULLTERMSTR FINAL * I STRINGPTR REF(URI([V]) = URI([conn])) path)
   OKEXTERN;
 int mg_remove(struct mg_connection FINAL   * OK REF(OK_PUT(V)) conn,
-              const char NULLTERMSTR FINAL * STRINGPTR path) OKEXTERN;
+              const char NULLTERMSTR FINAL * I STRINGPTR REF(URI([V]) = URI([conn])) path) OKEXTERN;
 
 
 int mg_snprintf(struct mg_connection *conn,
@@ -494,7 +494,7 @@ int url_decode(const char NULLTERMSTR FINAL * STRINGPTR SIZE_GE(src_len) LOC(S) 
 void remove_double_dots_and_double_slashes(char NULLTERMSTR * STRINGPTR M s) OKEXTERN;
 
 //Doesn't actually modify any of conn's fields, so conn IS final here
-char NULLTERMSTR * START STRINGPTR REF(CONN([V]) = CONN([conn]))
+char NULLTERMSTR * I START STRINGPTR REF(CONN([V]) = CONN([conn])) REF(URI([V]) = URI([conn]))
 convert_uri_to_file_name(struct mg_connection FINAL *conn,
                          struct file * OK M filep) OKEXTERN;
 

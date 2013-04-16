@@ -6,7 +6,7 @@
 int
 REF((V != 0) => ? AUTHORIZED([CONN([conn])]))
 check_authorization(struct mg_connection   * OK OK_CONN conn,
-                    const NULLTERMSTR char * STRINGPTR  path)
+                    const NULLTERMSTR char * I STRINGPTR REF(URI([V]) = URI([conn])) path)
   OKEXTERN;
 
 int REF((V != 0) => OK_PUT(conn))
