@@ -1,0 +1,30 @@
+//Index into context option array
+qualif Option(v:int): v < 24
+qualif ConfigArray(v:ptr): v + 96 <= BLOCK_END([v])
+
+//Strings
+constant STRING:func(1, [@(0);int])
+
+//Qualifier for connections
+constant CONN: func(1, [@(0);int])
+qualif RequestMethodConn(v:ptr): (v != 0) => CONN([DEREF([v])]) = CONN([v])
+qualif ConnEq(v:ptr,p:ptr): (v != 0) => CONN([v]) = CONN([p])
+
+//Qualifiers for files
+constant FILE: func(1, [@(0);int])
+
+constant AUTHORIZED: func(1, [int;bool])
+constant AUTHORIZED_BY: func(1, [int;int;bool])
+qualif AuthorizedCond(v:int): v != 0 => ? AUTHORIZED([CONN([@c])])
+qualif AuthorizedByCond(v:int): v != 0 => ? AUTHORIZED_BY([CONN([@c]);FILE([@f])])
+qualif AuthorizedPut(v:int):
+  v != 0 => ? AUTHORIZED_BY([CONN([@c]);(DEREF([(DEREF([@c+20]):ptr)+8]):int)])
+
+//qualif Bool(v:int): ||[v = 0; v = 1]
+
+qualif PutPasswdIdx(v:int): v = 8
+
+qualif Err304(v:int): v = 304 => (?AUTHORIZED([CONN([@c])]))
+
+constant URI: func(1, [@(0); int])
+qualif ConnUri(v:ptr,c:ptr): URI([v]) = URI([c])
