@@ -29,27 +29,9 @@
 #endif // DEBUG
 #endif // DEBUG_TRACE
 
-
-#ifdef CIL
-void assert_same_file(void * REF(FILE([V]) = FILE([p2])) p1,
-                      void * p2) OKEXTERN;
-
-void assert_eq_strings(char NULLTERMSTR FINAL * STRINGPTR p,
-                       char NULLTERMSTR FINAL  *STRINGPTR REF(STRING([p]) = STRING([V])) q) OKEXTERN;
-
-void assert_pw_ok(struct mg_connection * START OK REF(? PASSWORD_OK([CONN([V]);FILE([f])])) c,
-                  struct file *f) OKEXTERN;
-#else
-#define assert_same_file(__x,__y)
-#endif
-
-//use domain specific logic to something something
-
-
-
 void
-handle_directory_request(struct mg_connection * OK M REF(?AUTHORIZED([CONN([V])])) conn,
-                         const char NULLTERMSTR * STRINGPTR dir)
+handle_directory_request(struct mg_connection INST(CTX_CFG,CTX_CFG)* OK M REF(?AUTHORIZED([CONN([V])])) conn,
+                         const char NULLTERMSTR *LOC(CTX_CFG) STRINGPTR dir)
 {
   int i, sort_direction;
   struct dir_scan_data data = { NULL, 0, 128 };
