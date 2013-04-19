@@ -35,18 +35,20 @@ qualif PasswordOK(v:int): (v != 0) => ? PASSWORD_OK([CONN([@conn]);@h])
 
 //Connection Authorization
 constant AUTHORIZED: func(1, [int;bool])
-constant AUTHORIZED_BY: func(1, [int;int;bool])
+//constant AUTHORIZED_BY: func(1, [int;int;bool])
 qualif AuthorizedWitness(v:int,c:ptr): ? AUTHORIZED([CONN([c])])
-qualif AuthorizedWitness(v:int,c:ptr): ? AUTHORIZED_BY([CONN([c]);FILE([@f])])
+//qualif AuthorizedWitness(v:int,c:ptr): ? AUTHORIZED_BY([CONN([c]);FILE([@f])])
 qualif AuthorizedCond(v:int): v != 0 => ? AUTHORIZED([CONN([@c])])
-qualif AuthorizedByCond(v:int): v != 0 => ? AUTHORIZED_BY([CONN([@c]);FILE([@f])])
+//qualif AuthorizedByCond(v:int): v != 0 => ? AUTHORIZED_BY([CONN([@c]);FILE([@f])])
 
 //PASSWD Files
 constant PW_ENT: func(1, [@(0); @(1)])
 constant AUTH_FILE: func(1, [int;int;bool])
-qualif AuthFile(v:ptr): ?AUTH_FILE([CONN([@c]);FILE([v])])
-qualif AuthorizedPut(v:int):
-  v != 0 => ? AUTHORIZED_BY([CONN([@c]);(DEREF([(DEREF([@c+20]):ptr)+8]):int)])
+qualif AuthFile(v:ptr):    ?AUTH_FILE([CONN([@c]);FILE([v])])
+qualif AuthFilePut(v:int): ?AUTH_FILE([CONN([@c]);(DEREF([(DEREF([@c+20]):ptr)+8]):int)])
+qualif AuthFilePutCond(v:int): (v != 0) => ?AUTH_FILE([CONN([@c]);(DEREF([(DEREF([@c+20]):ptr)+8]):int)])
+//qualif AuthorizedPut(v:int):
+//  v != 0 => ? AUTHORIZED_BY([CONN([@c]);(DEREF([(DEREF([@c+20]):ptr)+8]):int)])
 
 qualif PwEntry(v:ptr): v != 0 => &&[PW_ENT([DEREF([v])]) = v;
                                     PW_ENT([DEREF([v+4])]) = v;
@@ -82,8 +84,10 @@ qualif Err304(v:int): v = 304 => (?AUTHORIZED([CONN([@c])]))
 constant NO_AUTHFILE: func(1, [int;bool])
 constant NO_PROTECTFILE: func(1, [int;bool])
 
-qualif NoAuthfile(v:ptr): v = 0 => ? NO_AUTHFILE([CONN([@c])])
-qualif NoProtectfile(v:ptr): v = 0 => ? NO_PROTECTFILE([CONN([@c])])
+qualif NoAuthfileC(v:ptr): v = 0 => ? NO_AUTHFILE([CONN([@c])])
+qualif NoAuthfile(v:ptr): ? NO_AUTHFILE([CONN([@c])])
+qualif NoProtectfileC(v:ptr): v = 0 => ? NO_PROTECTFILE([CONN([@c])])
+qualif NoProtectfile(v:ptr): ? NO_PROTECTFILE([CONN([@c])])
 qualif FpNullGPassNull(v:ptr): v = 0 => (DEREF([(DEREF([@c+20]):ptr)+44]) = 0)
 
 qualif AuthFileDef(v:ptr): || [FILE([v]) = (DEREF([(DEREF([@c+20]):ptr)+44]) : int);
@@ -98,4 +102,9 @@ qualif AuthFileWitness(v:int): ?AUTH_FILE([CONN([@c]);FILE([@r])])
 qualif AuthFileWitness(v:int): ?AUTH_FILE([CONN([@c]);FILE([@f])])
 
 constant URI: func(1, [@(0); int])
-qualif ConnUri(v:ptr,c:ptr): URI([v]) = URI([c])
+qualif ConnUri(v:ptr,c:ptr): URI([v]) = URI([CONN([c])])
+
+constant WRITE: func(1, [@(0);bool])
+qualif Write(v:ptr): ?WRITE([v])
+qualif NoWrite(v:ptr): ?WRITE([v]) => (1 = 0)
+//qualif OkWrite(v:ptr,m:ptr):?WRITE([m]) => ?AUTHORIZED_BY([CONN([__c]);(DEREF([(DEREF([v+20]):ptr)+8]):int)])

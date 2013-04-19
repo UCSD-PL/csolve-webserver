@@ -246,7 +246,7 @@ strchr (__const char *__s, int __c) __THROW
 # endif
 }
 #else
-extern char NULLTERMSTR * NNSTRINGPTR M LOC(S)
+extern char NULLTERMSTR * NNSTRINGPTR MPTR LOC(S)
 strchr(__const char NULLTERMSTR FINAL * LOC(S) STRINGPTR __s,
        int __c)
      __THROW __attribute_pure__ __nonnull ((1)) OKEXTERN;

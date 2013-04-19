@@ -2181,7 +2181,7 @@ static void send_file_data(struct mg_connection *conn, struct file *filep,
   }
 }
 
-static int parse_range_header(const char *header, int64_t *a, int64_t *b) {
+int parse_range_header(const char *header, int64_t *a, int64_t *b) {
   return sscanf(header, "bytes=%" INT64_FMT "-%" INT64_FMT, a, b);
 }
 
@@ -2195,7 +2195,7 @@ static void construct_etag(char *buf, size_t buf_len,
            (unsigned long) filep->modification_time, filep->size);
 }
 
-static void fclose_on_exec(struct file *filep) {
+void fclose_on_exec(struct file *filep) {
   if (filep != NULL && filep->fp != NULL) {
 #ifndef _WIN32
     fcntl(fileno(filep->fp), F_SETFD, FD_CLOEXEC);
@@ -2406,7 +2406,7 @@ int is_not_modified(const struct mg_connection *conn,
     (ims != NULL && filep->modification_time <= parse_date_string(ims));
 }
 
-static int forward_body_data(struct mg_connection *conn, FILE *fp,
+int forward_body_data(struct mg_connection *conn, FILE *fp,
                              SOCKET sock, SSL *ssl) {
   const char *expect, *body;
   char buf[MG_BUF_LEN];

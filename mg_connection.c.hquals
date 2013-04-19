@@ -13,6 +13,11 @@ qualif ConnEq(v:ptr,p:ptr): (v != 0) => CONN([v]) = CONN([p])
 //Qualifiers for files
 constant FILE: func(1, [@(0);int])
 
+constant AUTH_FILE: func(1, [int;int;bool])
+qualif AuthFile(v:ptr):    ?AUTH_FILE([CONN([@c]);FILE([v])])
+qualif AuthFilePut(v:int): ?AUTH_FILE([CONN([@c]);(DEREF([(DEREF([@c+20]):ptr)+8]):int)])
+qualif AuthFilePutCond(v:int): (v != 0) => ?AUTH_FILE([CONN([@c]);(DEREF([(DEREF([@c+20]):ptr)+8]):int)])
+
 constant AUTHORIZED: func(1, [int;bool])
 constant AUTHORIZED_BY: func(1, [int;int;bool])
 qualif AuthorizedCond(v:int): v != 0 => ? AUTHORIZED([CONN([@c])])

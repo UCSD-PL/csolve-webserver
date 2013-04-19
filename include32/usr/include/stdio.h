@@ -764,7 +764,7 @@ __END_NAMESPACE_STD
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern int fseeko (FILE *__stream, __off_t __off, int __whence);
+extern int fseeko (CSOLVE_IO_FILE_PTR __stream, __off_t __off, int __whence) OKEXTERN;
 /* Return the current position of STREAM.
 
    This function is a possible cancellation point and therefore not

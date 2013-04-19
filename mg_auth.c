@@ -9,7 +9,7 @@ char NULLTERMSTR FINAL * I STRINGPTR nondet_string() OKEXTERN;
 // V = 1 => Auth(conn)
 // Authorize against the opened passwords file. Return 1 if authorized.
 int
-REF((V != 0) => ? AUTHORIZED_BY([CONN([conn]);FILE([filep])]))
+//REF((V != 0) => ? AUTHORIZED_BY([CONN([conn]);FILE([filep])]))
 authorize(struct mg_connection FINAL * OK OK_CONN conn,
           struct file                * OK REF(?AUTH_FILE([CONN([conn]);FILE([V])])) filep)
 {
@@ -56,8 +56,8 @@ authorize(struct mg_connection FINAL * OK OK_CONN conn,
 // Use the global passwords file, if specified by auth_gpass option,
 // or search for .htpasswd in the requested directory.
 struct file * NNSTART NNREF(?AUTH_FILE([CONN([conn]);FILE([V])]))
-open_auth_file(struct mg_connection   * OK conn,
-               const char NULLTERMSTR * STRINGPTR path)
+open_auth_file(struct mg_connection   INST(CTX_CFG,CTX_CFG) * OK conn,
+               const char NULLTERMSTR * LOC(CTX_CFG) STRINGPTR path)
 {
   int qed;
   struct file *ret = NULL;
@@ -66,7 +66,7 @@ open_auth_file(struct mg_connection   * OK conn,
   if (gpass != NULL)
   {
     // Use global passwords file
-    if ((ret = mg_fopena(conn, gpass, "r")) == NULL)
+    if ((ret = mg_fopena(conn, gpass, mode_ro)) == NULL)
     {
       cry(conn, "fopen(%s): %s", gpass, strerror(ERRNO));
     }
@@ -101,7 +101,7 @@ check_authorization(struct mg_connection * OK OK_CONN conn, const NULLTERMSTR ch
     return 0;
 
   fname = mg_protect_uri_fname(conn);
-  if (fname && ((filep = mg_fopena(conn, fname, "r")) == NULL))
+  if (fname && ((filep = mg_fopena(conn, fname, mode_ro)) == NULL))
   {
     /* cry(conn, "%s: cannot open %s: %s", __func__, fname, strerror(errno)); */
     return 0;
@@ -112,15 +112,14 @@ check_authorization(struct mg_connection * OK OK_CONN conn, const NULLTERMSTR ch
   }
 
   /** If there was an auth_file to open, then auth. Otherwise no auth */
-  if (filep)
+  if (filep != NULL)
   {
     if(is_file_opened(filep))
     {
       //OK
-      /* file_ok = mg_bless_passwd(conn,filep); */
       authorized = authorize(conn, filep);
       if (authorized) {
-        qed = mg_authorized_erase_file(conn,filep);
+//        qed = mg_authorized_erase_file(conn,filep);
         mg_fclose(filep);
         return 1;
       }
@@ -133,7 +132,6 @@ check_authorization(struct mg_connection * OK OK_CONN conn, const NULLTERMSTR ch
 }
 
 int
-REF((V != 0) => OK_PUT(conn))
 is_authorized_for_put(struct mg_connection * OK OK_CONN conn)
   CHECK_TYPE
 {
@@ -143,9 +141,8 @@ is_authorized_for_put(struct mg_connection * OK OK_CONN conn)
   int qed;
   int file_ok;
 
-  if (passfile != NULL && (filep = mg_fopena(conn, passfile, "r")) != NULL) {
-    qed = mg_authfile_def(conn, filep);
-//    file_ok = mg_bless_passwd(conn,filep);
+  if (passfile != NULL && (filep = mg_fopena(conn, passfile, mode_ro)) != NULL) {
+    qed = mg_put_authfile_def(conn, filep);
     ret = authorize(conn, filep);
     mg_fclose(filep);
   }

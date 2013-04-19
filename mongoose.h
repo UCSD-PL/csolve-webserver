@@ -70,8 +70,25 @@ extern const char NULLTERMSTR *http_500_error OKEXTERN;
 extern "C" {
 #endif // __cplusplus
 
+#define M MPTR
+#define I IPTR
+
+#define MODE_STRING(__v) extern char NULLTERMSTR * IPTR STRINGPTR __v OKEXTERN
+#define W  REF(?WRITE([V]))
+#define NW REF(?WRITE([V]) => (1 = 0))
+MODE_STRING(NW mode_ro);
+MODE_STRING(W  mode_wo);
+MODE_STRING(W  mode_rw);
+
 #if defined(NO_SSL_DL) || defined(CIL)
 #include <openssl/ssl.h>
+
+#ifdef CIL
+#define CSOLVE_SSL int
+#else
+#define CSOLVE_SSL SSL
+#endif
+  
 #else
 // SSL loaded dynamically from DLL.
 // I put the prototypes here to be independent from OpenSSL source installation.
@@ -192,7 +209,8 @@ enum {
 
 //Handy
 #define PUT_FILE_CONFIG(__c) DEREF([(DEREF([__c+20]):ptr)+8])
-#define OK_PUT(__c) ?AUTHORIZED_BY([CONN([__c]);(PUT_FILE_CONFIG(__c):int)])
+//#define OK_PUT(__c) ?AUTHORIZED_BY([CONN([__c]);(PUT_FILE_CONFIG(__c):int)])
+#define OK_PUT(__c) &&[?AUTHORIZED([CONN([__c])]);?AUTH_FILE([CONN([__c]);(PUT_FILE_CONFIG(__c):int)])]
 
 static const char *config_options[] = {
   "cgi_pattern", "**.cgi$|**.pl$|**.php$",
@@ -347,7 +365,7 @@ struct mg_request_info {
 
 struct mg_connection {
   struct mg_request_info request_info;
-  struct mg_context INST(CTX_CFG,CTX_CFG) * OK FINAL ctx;
+  struct mg_context INST(CTX_CFG,CTX_CFG) FINAL * OK FINAL ctx;
   CSOLVE_HIDE_DECLS
   (
     SSL *ssl;                   // SSL descriptor
@@ -429,14 +447,14 @@ void send_http_error(struct mg_connection * W3C_HTTP_ERRORS conn,
                      PRINTF_FORMAT_STRING(const char NULLTERMSTR *fmt), ...)
   PRINTF_ARGS(4, 5);
 #endif
-void send_options(struct mg_connection FINAL * OK REF(?AUTHORIZED([CONN([V])])) conn) OKEXTERN;
+void send_options(struct mg_connection * OK REF(?AUTHORIZED([CONN([V])])) conn) OKEXTERN;
 
-void put_file(struct mg_connection   FINAL * OK REF(OK_PUT(V)) conn,
-              const char NULLTERMSTR FINAL * I STRINGPTR REF(URI([V]) = URI([conn])) path)
-  OKEXTERN;
-int mg_remove(struct mg_connection FINAL   * OK REF(OK_PUT(V)) conn,
-              const char NULLTERMSTR FINAL * I STRINGPTR REF(URI([V]) = URI([conn])) path) OKEXTERN;
+void put_file(struct mg_connection  INST(CTX_CFG,CTX_CFG) * M OK REF(?AUTHORIZED([CONN([V])])) REF(OK_PUT(V)) conn,
+              const char NULLTERMSTR * LOC(CTX_CFG) I STRINGPTR REF(URI([V]) = URI([CONN([conn])])) path)
+OKEXTERN;
 
+int mg_remove(struct mg_connection INST(CTX_CFG,CTX_CFG) * OK REF(OK_PUT(V)) conn,
+              const char NULLTERMSTR * LOC(CTX_CFG) I STRINGPTR REF(URI([V]) = URI([CONN([conn])])) path) OKEXTERN;
 
 int mg_snprintf(struct mg_connection *conn,
                 char NULLTERMSTR * STRINGPTR /* SIZE_GE(buflen)  */buf,
@@ -447,23 +465,23 @@ int mg_snprintf(struct mg_connection *conn,
 
 int
 REF(V != 0 => (DEREF([filep + 16]) > 0))
-mg_fopen(struct mg_connection INST(CTX_CFG,CTX_CFG) FINAL *conn,
+mg_fopen(struct mg_connection INST(CTX_CFG,CTX_CFG) FINAL *OK REF(?WRITE([mode]) => OK_PUT(V)) conn,
          const char NULLTERMSTR FINAL                     *LOC(CTX_CFG) STRINGPTR path,
-         const char NULLTERMSTR FINAL                     *STRINGPTR mode,
+         const char NULLTERMSTR FINAL                     *IPTR STRINGPTR mode,
          struct file                                      *filep)
   OKEXTERN;
 
-struct file * NNOK
+struct file * I NNOK
 REF(V != 0 => (DEREF([V + 16]) > 0))
 REF((? MUTABLE([BLOCK_BEGIN([path])]) => (0 = 1)) => (FILE([V]) = (path : int)))
 REF(FILE([V]) = (path : int))
-mg_fopena(struct mg_connection INST(CTX_CFG,CTX_CFG) FINAL *conn,
+mg_fopena(struct mg_connection INST(CTX_CFG,CTX_CFG) FINAL *OK REF(?WRITE([mode]) => OK_PUT(V)) conn,
           const char NULLTERMSTR FINAL                     *LOC(CTX_CFG) STRINGPTR path,
           const char NULLTERMSTR FINAL                     *STRINGPTR mode)
   OKEXTERN;
 
-int mg_stat(struct mg_connection   FINAL *conn,
-            const char NULLTERMSTR       *STRINGPTR path,
+int mg_stat(struct mg_connection INST(CTX_CFG,CTX_CFG) FINAL *conn,
+            const char NULLTERMSTR       * LOC(CTX_CFG) STRINGPTR path,
             struct file                  *filep)
   OKEXTERN;
 
@@ -494,7 +512,7 @@ int url_decode(const char NULLTERMSTR FINAL * STRINGPTR SIZE_GE(src_len) LOC(S) 
 void remove_double_dots_and_double_slashes(char NULLTERMSTR * STRINGPTR M s) OKEXTERN;
 
 //Doesn't actually modify any of conn's fields, so conn IS final here
-char NULLTERMSTR * I START STRINGPTR REF(CONN([V]) = CONN([conn])) REF(URI([V]) = URI([conn]))
+char NULLTERMSTR * I START STRINGPTR REF(CONN([V]) = CONN([conn])) REF(URI([V]) = URI([CONN([conn])]))
 convert_uri_to_file_name(struct mg_connection FINAL *conn,
                          struct file * OK M filep) OKEXTERN;
 
@@ -579,28 +597,28 @@ check_password(
   )
   OKEXTERN;
 
-int must_hide_file(struct mg_connection FINAL *conn,
-                   const char NULLTERMSTR * STRINGPTR path)
-  OKEXTERN;
+int must_hide_file(struct mg_connection FINAL INST(CTX_CFG,CTX_CFG) *conn,
+                   const char NULLTERMSTR * LOC(CTX_CFG) STRINGPTR path)
+OKEXTERN;
 
-void handle_propfind(struct mg_connection   * M OK OK_CONN REF(?AUTHORIZED([CONN([V])])) conn,
-                     const char NULLTERMSTR * STRINGPTR path,
+  void handle_propfind(struct mg_connection  INST(CTX_CFG,CTX_CFG) * M OK OK_CONN REF(?AUTHORIZED([CONN([V])])) conn,
+                       const char NULLTERMSTR * LOC(CTX_CFG) STRINGPTR path,
                      struct file            * filep)
   OKEXTERN;
 
 // For given directory path, substitute it to valid index file.
 // Return 0 if index file has been found, -1 if not found.
 // If the file is found, it's stats is returned in stp.
-int substitute_index_file(struct mg_connection *conn,
-                          char NULLTERMSTR *path,
+int substitute_index_file(struct mg_connection INST(CTX_CFG,CTX_CFG) *conn,
+                          char NULLTERMSTR * LOC(CTX_CFG) path,
                           size_t path_len,
                           struct file *filep) OKEXTERN;
 
 #warning "incomplete type for dir_scan_callback?"
 void dir_scan_callback(struct de *de, struct dir_scan_data *data) OKEXTERN;
 
-int scan_directory(struct mg_connection *conn,
-                   const char NULLTERMSTR *dir,
+int scan_directory(struct mg_connection INST(CTX_CFG,CTX_CFG)*conn,
+                   const char NULLTERMSTR *LOC(CTX_CFG)dir,
                    struct dir_scan_data *ds,
                    void (*cb)(struct de *, struct dir_scan_data *)) OKEXTERN;
 
@@ -613,19 +631,19 @@ int match_prefix(const char FINAL NULLTERMSTR * SIZE_GE(pattern_len) STRINGPTR p
                  int pattern_len,
                  const char FINAL NULLTERMSTR * STRINGPTR str) OKEXTERN;
 
-void handle_cgi_request(struct mg_connection * OK REF(?AUTHORIZED([CONN([V])])) conn,
-                        const char FINAL NULLTERMSTR * STRINGPTR prog)
+void handle_cgi_request(struct mg_connection INST(CTX_CFG,CTX_CFG) * OK REF(?AUTHORIZED([CONN([V])])) conn,
+                        const char FINAL NULLTERMSTR * LOC(CTX_CFG) STRINGPTR prog)
   OKEXTERN;
 
-void handle_ssi_file_request(struct mg_connection * OK REF(?AUTHORIZED([CONN([V])])) conn,
-                             const char FINAL NULLTERMSTR * STRINGPTR path)
+void handle_ssi_file_request(struct mg_connection INST(CTX_CFG,CTX_CFG)* OK REF(?AUTHORIZED([CONN([V])])) conn,
+                             const char FINAL NULLTERMSTR * LOC(CTX_CFG) STRINGPTR path)
   OKEXTERN;
 
 int is_not_modified(const struct mg_connection FINAL *conn,
                     const struct file *filep) OKEXTERN;
 
-void handle_file_request(struct mg_connection * OK /* OK_URI OK_CONN */ REF(?AUTHORIZED([CONN([V])])) conn,
-                         const char NULLTERMSTR FINAL *path,
+void handle_file_request(struct mg_connection INST(CTX_CFG,CTX_CFG) * OK REF(?AUTHORIZED([CONN([V])])) conn,
+                         const char NULLTERMSTR FINAL * LOC(CTX_CFG) path,
                          struct file *filep) OKEXTERN;
 
 void reset_per_request_attributes(struct mg_connection *conn);
@@ -638,12 +656,16 @@ int is_valid_uri(const char *uri);
 void log_access(const struct mg_connection *conn);
 int should_keep_alive(const struct mg_connection *conn);
 
-/**
-REFINE process_new_connection
-conn:
-*conn:
--> 
-*/
+int forward_body_data(struct mg_connection * OK REF(?AUTHORIZED([CONN([V])])) conn,
+                      CSOLVE_IO_FILE_PTR fp,
+                      SOCKET sock,
+                      CSOLVE_SSL * NNOK ssl)
+  OKEXTERN;
+
+void fclose_on_exec(struct file * NNOK filep) OKEXTERN;
+int parse_range_header(const char FINAL NULLTERMSTR * STRINGPTR header,
+                       int64_t *a, int64_t *b) OKEXTERN;
+
 void process_new_connection(struct mg_connection *conn);
 //////////////////////////////////////////////////////
 
@@ -758,7 +780,10 @@ int mg_read(struct mg_connection *, void *buf, size_t len);
 // This is a helper function. It traverses request_info->http_headers array,
 // and if the header is present in the array, returns its value. If it is
 // not present, NULL is returned.
-const char *mg_get_header(const struct mg_connection *, const char *name);
+const char NULLTERMSTR * NNSTRINGPTR
+mg_get_header(const struct mg_connection FINAL *,
+              const char FINAL NULLTERMSTR * STRINGPTR name)
+  OKEXTERN;
 
 
 // Get a value of particular form variable.
