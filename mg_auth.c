@@ -41,7 +41,8 @@ authorize(struct mg_connection FINAL * OK OK_CONN conn,
         && auth_domain
         && !strcmp(auth_domain, f_domain))
     {
-      if (check_password(conn->request_info.request_method, ha1, ah.uri,
+      if (conn->request_info.request_method && 
+          check_password(conn->request_info.request_method, ha1, ah.uri,
                          ah.nonce, ah.nc, ah.cnonce, ah.qop, ah.response))
       {
         qed = mg_authorized_def(conn, &ah, filep, ha1, f_user, f_domain);

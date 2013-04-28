@@ -29,75 +29,64 @@
 #endif // DEBUG
 #endif // DEBUG_TRACE
 
+/* void */
+/* handle_directory_request(struct mg_connection INST(CTX_CFG,CTX_CFG)* OK M REF(?AUTHORIZED([CONN([V])])) conn, */
+/*                          const char NULLTERMSTR *LOC(CTX_CFG) STRINGPTR dir) */
+/* { */
+/*   int i, sort_direction; */
+/*   struct dir_scan_data data = { NULL, 0, 128 }; */
+
+/*   if (!scan_directory(conn, dir, &data, dir_scan_callback)) { */
+/*     send_http_error(conn, 500, "Cannot open directory", */
+/*                     "Error: opendir"); */
+/*                     /\* "Error: opendir(%s): %s", dir, strerror(ERRNO)); *\/ */
+/*     return; */
+/*   } */
+
+/*   sort_direction = conn->request_info.query_string != NULL && */
+/*     conn->request_info.query_string[0] && */
+/*     conn->request_info.query_string[1] == 'd' ? 'a' : 'd'; */
+
+/*   conn->must_close = 1; */
+/*   mg_printf(conn, "%s", */
+/*             "HTTP/1.1 200 OK\r\n" */
+/*             "Connection: close\r\n" */
+/*             "Content-Type: text/html; charset=utf-8\r\n\r\n"); */
+
+/*   mg_printf_inc(conn, */
+/*       "<html><head><title>Index of %s</title>" */
+/*       "<style>th {text-align: left;}</style></head>" */
+/*       "<body><h1>Index of %s</h1><pre><table cellpadding=\"0\">" */
+/*       "<tr><th><a href=\"?n%c\">Name</a></th>" */
+/*       "<th><a href=\"?d%c\">Modified</a></th>" */
+/*       "<th><a href=\"?s%c\">Size</a></th></tr>" */
+/*                                     "<tr><td colspan=\"3\"><hr></td></tr>", */
+/*       conn->request_info.uri, conn->request_info.uri, */
+/*       sort_direction, sort_direction, sort_direction); */
+
+/*   // Print first entry - link to a parent directory */
+/*   mg_printf_inc(conn, */
+/*       "<tr><td><a href=\"%s%s\">%s</a></td>" */
+/*       "<td>&nbsp;%s</td><td>&nbsp;&nbsp;%s</td></tr>\n", */
+/*       conn->request_info.uri, "..", "Parent directory", "-", "-"); */
+
+/*   print_dir_entries(&data); */
+/*   if (data.entries) { */
+/*     free(data.entries); */
+/*   } */
+
+/*   mg_printf_inc(conn, "%s", "</table></body></html>"); */
+/*   conn->status_code = 200; */
+/* } */
+
+
 void
-handle_directory_request(struct mg_connection INST(CTX_CFG,CTX_CFG)* OK M REF(?AUTHORIZED([CONN([V])])) conn,
-                         const char NULLTERMSTR *LOC(CTX_CFG) STRINGPTR dir)
+prepare_request(struct mg_connection_pre *conn)
 {
-  int i, sort_direction;
-  struct dir_scan_data data = { NULL, 0, 128 };
-
-  if (!scan_directory(conn, dir, &data, dir_scan_callback)) {
-    send_http_error(conn, 500, "Cannot open directory",
-                    "Error: opendir");
-                    /* "Error: opendir(%s): %s", dir, strerror(ERRNO)); */
-    return;
-  }
-
-  sort_direction = conn->request_info.query_string != NULL &&
-    conn->request_info.query_string[0] &&
-    conn->request_info.query_string[1] == 'd' ? 'a' : 'd';
-
-  conn->must_close = 1;
-  mg_printf(conn, "%s",
-            "HTTP/1.1 200 OK\r\n"
-            "Connection: close\r\n"
-            "Content-Type: text/html; charset=utf-8\r\n\r\n");
-
-  mg_printf_inc(conn,
-      "<html><head><title>Index of %s</title>"
-      "<style>th {text-align: left;}</style></head>"
-      "<body><h1>Index of %s</h1><pre><table cellpadding=\"0\">"
-      "<tr><th><a href=\"?n%c\">Name</a></th>"
-      "<th><a href=\"?d%c\">Modified</a></th>"
-      "<th><a href=\"?s%c\">Size</a></th></tr>"
-                                    "<tr><td colspan=\"3\"><hr></td></tr>",
-      conn->request_info.uri, conn->request_info.uri,
-      sort_direction, sort_direction, sort_direction);
-
-  // Print first entry - link to a parent directory
-  mg_printf_inc(conn,
-      "<tr><td><a href=\"%s%s\">%s</a></td>"
-      "<td>&nbsp;%s</td><td>&nbsp;&nbsp;%s</td></tr>\n",
-      conn->request_info.uri, "..", "Parent directory", "-", "-");
-
-  print_dir_entries(&data);
-  if (data.entries) {
-    free(data.entries);
-  }
-
-  mg_printf_inc(conn, "%s", "</table></body></html>");
-  conn->status_code = 200;
-}
-
-
-// This is the heart of the Mongoose's logic.
-// This function is called when the request is read, parsed and validated,
-// and Mongoose must decide what action to take: serve a file, or
-// a directory, or call embedded function, etcetera.
-void
-handle_request(struct mg_connection * OK OK_URI OK_CONN M conn)
-  CHECK_TYPE
-{
-  struct mg_request_info *ri = &conn->request_info;
-  char *path;
-  char *errstr = NULL;
-  int uri_len, ssl_index;
-  int is_put;
-  int auth_get;
-  struct file file = STRUCT_FILE_INITIALIZER;
+  struct mg_request_info_pre *ri = &conn->request_info;
   char *query_string = NULL;
-  char *uri = NULL;
-  int x;
+  char *uri          = NULL;
+  int uri_len;
 
   if ((uri = ri->uri) == NULL)
     return;
@@ -114,11 +103,39 @@ handle_request(struct mg_connection * OK OK_URI OK_CONN M conn)
   uri_len = (int) strlen(uri);
   url_decode(uri, uri_len, (char *) uri, uri_len + 1, 0);
   remove_double_dots_and_double_slashes((char *) uri);
-  path = convert_uri_to_file_name(conn, &file);
   conn->throttle = set_throttle(conn->ctx->config[THROTTLE],
-                                get_remote_ip(conn),
+                                get_remote_ip(freeze_conn(conn)),
                                 uri);
   DEBUG_TRACE(("%s", ri->uri));
+
+}
+// This is the heart of the Mongoose's logic.
+// This function is called when the request is read, parsed and validated,
+// and Mongoose must decide what action to take: serve a file, or
+// a directory, or call embedded function, etcetera.
+void
+handle_request(struct mg_connection_pre * OK OK_URI OK_CONN M conn)
+  CHECK_TYPE
+{
+  struct mg_request_info *ri;// = &conn->request_info;
+  char *path;
+  char *errstr = NULL;
+  int uri_len, ssl_index;
+  int is_put;
+  int auth_get;
+  struct file file = STRUCT_FILE_INITIALIZER;
+  char *query_string = NULL;
+  char *uri = NULL;
+  int x;
+
+  prepare_request(conn);
+
+  ri = &conn->request_info;
+  if ((uri = ri->uri) == NULL)
+    return;
+
+  conn = freeze_conn(conn);
+  path = convert_uri_to_file_name(conn, &file);
 
   is_put   = is_put_or_delete_request(conn);
   auth_get = check_authorization(conn,path);
@@ -202,17 +219,17 @@ handle_request(struct mg_connection * OK OK_URI OK_CONN M conn)
   {
     handle_propfind(conn, path, &file);
   }
-  else if (file.is_directory &&
-           !substitute_index_file(conn, path, sizeof(path), &file))
-  {
-    char *dir = conn->ctx->config[ENABLE_DIRECTORY_LISTING];
-    if (dir && !mg_strcasecmp(dir, "yes")) {
-      handle_directory_request(conn, path);
-    } else {
-      send_http_error(conn, 403, "Directory Listing Denied",
-                      "Directory listing denied");
-    }
-  }
+  /* else if (file.is_directory && */
+  /*          !substitute_index_file(conn, path, sizeof(path), &file)) */
+  /* { */
+  /*   char *dir = conn->ctx->config[ENABLE_DIRECTORY_LISTING]; */
+  /*   if (dir && !mg_strcasecmp(dir, "yes")) { */
+  /*     handle_directory_request(conn, path); */
+  /*   } else { */
+  /*     send_http_error(conn, 403, "Directory Listing Denied", */
+  /*                     "Directory listing denied"); */
+  /*   } */
+  /* } */
 #if !defined(NO_CGI)
   else if (conn->ctx->config[CGI_EXTENSIONS] &&
            match_prefix(conn->ctx->config[CGI_EXTENSIONS],
