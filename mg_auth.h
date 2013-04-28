@@ -5,7 +5,7 @@
 
 int
 REF((V != 0) => ? AUTHORIZED([CONN([conn])]))
-check_authorization(struct mg_connection   INST(CTX_CFG,CTX_CFG) * OK OK_CONN conn,
+check_authorization(struct mg_connection INST(CTX_CFG,CTX_CFG) * OK OK_CONN conn,
                     const NULLTERMSTR char * LOC(CTX_CFG) I STRINGPTR REF(URI([V]) = URI([CONN([conn])])) path)
 OKEXTERN;
 
@@ -16,5 +16,5 @@ is_authorized_for_put(struct mg_connection * OK OK_CONN conn)
   OKEXTERN;
 
 void
-send_authorization_request(struct mg_connection * OK M conn)
+send_authorization_request(struct mg_connection* OK M conn)
   OKEXTERN;

@@ -339,11 +339,32 @@ struct mg_context {
 };
 
 // This structure contains information about the HTTP request.
-struct mg_request_info {
+struct mg_request_info_pre {
   const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR FINAL  I request_method; // "GET", "POST", etc
   const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR LOC(U) M uri;            // URL-decoded URI
   const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR http_version;   // E.g. "1.0", "1.1"
   const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR LOC(U) M query_string;   // URL part after '?', not including '?', or NULL
+  const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR remote_user;    // Authenticated user, or NULL if no auth used
+  CSOLVE_HIDE_DECLS
+  (
+    long remote_ip;             // Client's IP address
+    int remote_port;            // Client's port
+    int is_ssl;                 // 1 if SSL-ed, 0 if not
+    void *user_data;            // User data pointer passed to mg_start()
+
+    int num_headers;            // Number of HTTP headers
+    struct mg_header {
+      const char *name;         // HTTP header name
+      const char *value;        // HTTP header value
+    } http_headers[64];         // Maximum 64 headers
+  )
+};
+
+struct mg_request_info {
+  const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR FINAL  I request_method; // "GET", "POST", etc
+  const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR LOC(U) I uri;            // URL-decoded URI
+  const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR http_version;   // E.g. "1.0", "1.1"
+  const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR LOC(U) I query_string;   // URL part after '?', not including '?', or NULL
   const char NULLTERMSTR * NNVALIDPTR NNSTRINGPTR remote_user;    // Authenticated user, or NULL if no auth used
   CSOLVE_HIDE_DECLS
   (
@@ -399,6 +420,46 @@ struct mg_connection {
     int64_t last_throttle_bytes;// Bytes sent this second
   )
 };
+
+struct mg_connection_pre {
+  struct mg_request_info_pre request_info;
+  struct mg_context INST(CTX_CFG,CTX_CFG) FINAL * OK FINAL ctx;
+  CSOLVE_HIDE_DECLS
+  (
+    SSL *ssl;                   // SSL descriptor
+    SSL_CTX *client_ssl_ctx;    // SSL context for client connections
+  )
+  CSOLVE_HIDE_DECLS
+  (
+  struct socket client;       // Connected client
+    time_t birth_time;          // Time when request was received
+  )
+    int64_t num_bytes_sent;     // Total bytes sent to client
+  CSOLVE_HIDE_DECLS
+  (
+    int64_t content_len;        // Content-Length header value
+    int64_t consumed_content;   // How many bytes of content have been read
+    char *buf;                  // Buffer for received data
+    char *path_info;            // PATH_INFO part of the URL
+  )
+    int must_close;             // 1 if connection must be closed
+  CSOLVE_HIDE_DECLS
+  (
+    int buf_size;               // Buffer size
+    int request_len;            // Size of the request + headers in a buffer
+    int data_len;               // Total size of data in a buffer
+  )
+    int status_code;            // HTTP reply status code, e.g. 200
+    int throttle;               // Throttling, bytes/sec. <= 0 means no throttle
+  CSOLVE_HIDE_DECLS
+  (
+    time_t last_throttle_time;  // Last time throttled data was sent
+    int64_t last_throttle_bytes;// Bytes sent this second
+  )
+};
+
+struct mg_connection* M OK OK_CONN
+freeze_conn(struct mg_connection_pre FINAL *OK OK_CONN c) OKEXTERN;
 
 struct de {
   struct mg_connection *conn;
@@ -584,11 +645,11 @@ parse_password_line(char NULLTERMSTR * STRINGPTR line) OKEXTERN;
 int REF((V != 0) => ? PASSWORD_OK([CONN([method]);ha1]))
 check_password(
   //From the connection
-  const char NULLTERMSTR FINAL * NNSTRINGPTR I method,
+  const char NULLTERMSTR FINAL * STRINGPTR I method,
   //From the PWD file
-  const char NULLTERMSTR FINAL * NNSTRINGPTR I ha1,
+  const char NULLTERMSTR FINAL * STRINGPTR I ha1,
   //From the auth header
-  const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) NNSTRINGPTR I uri,
+  const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) STRINGPTR I uri,
   const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) NNSTRINGPTR I nonce,
   const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) NNSTRINGPTR I nc,
   const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) NNSTRINGPTR I cnonce,
@@ -643,7 +704,7 @@ int is_not_modified(const struct mg_connection FINAL *conn,
                     const struct file *filep) OKEXTERN;
 
 void handle_file_request(struct mg_connection INST(CTX_CFG,CTX_CFG) * OK REF(?AUTHORIZED([CONN([V])])) conn,
-                         const char NULLTERMSTR FINAL * LOC(CTX_CFG) path,
+                         const char NULLTERMSTR FINAL * LOC(CTX_CFG) I STRINGPTR path,
                          struct file *filep) OKEXTERN;
 
 void reset_per_request_attributes(struct mg_connection *conn);

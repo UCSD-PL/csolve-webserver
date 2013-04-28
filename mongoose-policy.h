@@ -11,9 +11,9 @@ mg_authorized_def(
   struct mg_connection FINAL * OK REF(? PASSWORD_OK([CONN([V]);ha1])) conn,
   struct ah            FINAL * REF(AHConnection(V,conn)) ah,
   struct file          FINAL * f,
-  char NULLTERMSTR FINAL * STRINGPTR REF(FILE([V]) = FILE([f])) REF(PW_ENT([V]) = PW_ENT([user]))   ha1,
-  char NULLTERMSTR FINAL * STRINGPTR REF(FILE([V]) = FILE([f])) REF(PW_ENT([V]) = PW_ENT([domain])) user,
-  char NULLTERMSTR FINAL * STRINGPTR REF(FILE([V]) = FILE([f])) REF(PW_ENT([V]) = PW_ENT([user]))  domain
+  char NULLTERMSTR FINAL * I STRINGPTR REF(FILE([V]) = FILE([f])) REF(PW_ENT([V]) = PW_ENT([user]))   ha1,
+  char NULLTERMSTR FINAL * I STRINGPTR REF(FILE([V]) = FILE([f])) REF(PW_ENT([V]) = PW_ENT([domain])) user,
+  char NULLTERMSTR FINAL * I STRINGPTR REF(FILE([V]) = FILE([f])) REF(PW_ENT([V]) = PW_ENT([user]))  domain
   )
   OKEXTERN;
 
