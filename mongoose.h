@@ -642,7 +642,7 @@ struct pw_ent {
 struct pw_ent * NNOK NNOK_PW(line)
 parse_password_line(char NULLTERMSTR * STRINGPTR line) OKEXTERN;
   
-int REF((V != 0) => ? PASSWORD_OK([CONN([method]);ha1]))
+int REF((V != 0) => ? PASSWORD_OK([CONN([method]);ha1;response]))
 check_password(
   //From the connection
   const char NULLTERMSTR FINAL * STRINGPTR I method,
@@ -654,7 +654,7 @@ check_password(
   const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) NNSTRINGPTR I nc,
   const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) NNSTRINGPTR I cnonce,
   const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) NNSTRINGPTR I qop,
-  const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) NNSTRINGPTR I response
+  const char NULLTERMSTR FINAL * REF(CONN([V]) = CONN([method])) STRINGPTR I response
   )
   OKEXTERN;
 

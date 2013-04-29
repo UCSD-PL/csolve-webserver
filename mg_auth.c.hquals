@@ -29,9 +29,9 @@ qualif FileOpen(v:ptr,p:ptr):
   (?MUTABLE([BLOCK_BEGIN([p])]) => (0 = 1)) => (FILE([v]) = (p : int))
 
 ////Password Checking
-constant PASSWORD_OK: func(1, [int;@(0);bool])
-qualif PasswordOK(v:int,h:ptr): (v != 0) => ? PASSWORD_OK([CONN([@conn]);h])
-qualif PasswordOK(v:int): (v != 0) => ? PASSWORD_OK([CONN([@conn]);@h])
+constant PASSWORD_OK: func(1, [int;@(0);@(1);bool])
+qualif PasswordOK(v:int): (v != 0) => ? PASSWORD_OK([CONN([@conn]);@h;~b])
+//qualif PasswordOK(v:int): (v != 0) => ? PASSWORD_OK([CONN([@conn]);@h])
 
 //Connection Authorization
 constant AUTHORIZED: func(1, [int;bool])
