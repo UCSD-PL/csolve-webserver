@@ -8,12 +8,12 @@
 int //REF(?AUTH_FILE([CONN([conn]);FILE([f])]) => ?AUTHORIZED_BY([CONN([conn]);FILE([f])]))
     REF(?AUTH_FILE([CONN([conn]);FILE([f])]) => ?AUTHORIZED([CONN([conn])]))
 mg_authorized_def(
-  struct mg_connection FINAL * OK REF(? PASSWORD_OK([CONN([V]);ha1])) conn,
+  struct mg_connection FINAL * OK REF(? PASSWORD_OK([CONN([V]);ha1;DEREF([ah+12])])) conn,
   struct ah            FINAL * REF(AHConnection(V,conn)) ah,
   struct file          FINAL * f,
-  char NULLTERMSTR FINAL * I STRINGPTR REF(FILE([V]) = FILE([f])) REF(PW_ENT([V]) = PW_ENT([user]))   ha1,
-  char NULLTERMSTR FINAL * I STRINGPTR REF(FILE([V]) = FILE([f])) REF(PW_ENT([V]) = PW_ENT([domain])) user,
-  char NULLTERMSTR FINAL * I STRINGPTR REF(FILE([V]) = FILE([f])) REF(PW_ENT([V]) = PW_ENT([user]))  domain
+  char NULLTERMSTR FINAL * I STRINGPTR REF(FILE([V]) = FILE([f])) REF(PW_ENT([V]) = PW_ENT([user])) ha1,
+  char NULLTERMSTR FINAL * I STRINGPTR REF(FILE([V]) = FILE([f])) REF(PW_ENT([V]) = PW_ENT([domain])) REF(STRING([V]) = STRING([DEREF([ah])])) user,
+  char NULLTERMSTR FINAL * I STRINGPTR REF(FILE([V]) = FILE([f])) REF(PW_ENT([V]) = PW_ENT([user])) REF(STRING([V]) = STRING([DEREF([(DEREF([conn+20]):ptr)+20])])) domain
   )
   OKEXTERN;
 
