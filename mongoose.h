@@ -635,14 +635,14 @@ struct pw_ent {
   NNREF(&&[FILE([DEREF([V])]) = FILE([__s]);                   \
            FILE([DEREF([V+4])]) = FILE([__s]);                 \
            FILE([DEREF([V+8])]) = FILE([__s])])                \
-  NNREF(&&[PW_ENT([DEREF([V])]) = V;                           \
-           PW_ENT([DEREF([V+4])]) = V;                         \
-           PW_ENT([DEREF([V+8])]) = V])
+  NNREF(&&[PW_ENT([DEREF([V])]) = PW_ENT([V]);                           \
+           PW_ENT([DEREF([V+4])]) = PW_ENT([V]);                         \
+           PW_ENT([DEREF([V+8])]) = PW_ENT([V])])
 
 struct pw_ent * NNOK NNOK_PW(line)
 parse_password_line(char NULLTERMSTR * STRINGPTR line) OKEXTERN;
   
-int REF((V != 0) => ? PASSWORD_OK([CONN([method]);ha1;response]))
+int REF((V != 0) => ? PASSWORD_OK([CONN([method]);PW_ENT([ha1]);response]))
 check_password(
   //From the connection
   const char NULLTERMSTR FINAL * STRINGPTR I method,
